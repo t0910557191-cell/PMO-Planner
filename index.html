@@ -394,6 +394,44 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
 .origin-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .origin-row code { font-size: .95rem; background: var(--surface); padding: 4px 8px; border-radius: 6px; overflow-wrap: anywhere; }
 
+/* Schedule: month grid + week list */
+:root { --k-task: var(--accent); --k-ms: #8a5ca8; --k-follow: var(--warm); --k-routine: #5a6fb0; --k-google: #7b8a87; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --k-ms: #c39be0; --k-routine: #93a6e6; --k-google: #a3b1ae; } }
+:root[data-theme="dark"] { --k-ms: #c39be0; --k-routine: #93a6e6; --k-google: #a3b1ae; }
+.kind-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.list li > .kind-dot { margin-top: 8px; }
+.k-task { background: var(--k-task); } .k-ms { background: var(--k-ms); } .k-follow { background: var(--k-follow); }
+.k-routine { background: var(--k-routine); } .k-google { background: var(--k-google); }
+.cal-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.cal-head h2 { margin: 0 auto 0 4px; order: -1; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.cal-wd { text-align: center; font-size: .78rem; color: var(--muted); padding: 4px 0; }
+.cal-cell { position: relative; font: inherit; color: var(--ink); background: var(--bg); border: 1px solid transparent; border-radius: 10px;
+  min-height: 64px; padding: 6px 4px; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; }
+.cal-cell.out { opacity: .45; }
+.cal-cell.is-today .cal-num { background: var(--accent); color: var(--accent-ink); }
+.cal-cell.is-sel { border-color: var(--accent); background: var(--accent-soft); }
+.cal-num { font-variant-numeric: tabular-nums; font-size: .92rem; width: 26px; height: 26px; line-height: 26px; border-radius: 50%; text-align: center; }
+.cal-dots { display: flex; gap: 3px; flex-wrap: wrap; justify-content: center; }
+.cal-dots .kind-dot { width: 6px; height: 6px; }
+.cal-count { position: absolute; top: 4px; right: 6px; font-size: .68rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.cal-legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 12px; font-size: .82rem; color: var(--muted); }
+.cal-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.week { display: flex; flex-direction: column; gap: 4px; }
+.week-day { border-top: 1px solid var(--line); padding-top: 8px; }
+.week-day:first-child { border-top: 0; padding-top: 0; }
+.week-label { font: inherit; font-weight: 500; background: none; border: 0; color: var(--ink); padding: 4px 0; cursor: pointer; }
+.week-day.is-today .week-label { color: var(--accent); }
+.week-day .empty { padding: 2px 0 8px; }
+@media (max-width: 640px) {
+  .cal-grid { gap: 2px; }
+  .cal-cell { min-height: 48px; padding: 4px 2px; border-radius: 8px; }
+  .cal-num { width: 24px; height: 24px; line-height: 24px; font-size: .88rem; }
+  .cal-count { display: none; }
+}
+
+.week-day.is-empty { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; padding-bottom: 6px; }
+
 </style>
 </head>
 <body>
@@ -409,6 +447,7 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
       <nav aria-label="主選單">
         <div class="nav-group">
           <a href="#/today" data-nav="today">今天</a>
+          <a href="#/schedule" data-nav="schedule">行事曆</a>
           <a href="#/dashboard" data-nav="dashboard">總覽</a>
           <a href="#/tasks" data-nav="tasks">任務</a>
           <a href="#/followups" data-nav="followups">等待回覆</a>
@@ -1668,7 +1707,7 @@ PMO.gcal = (function () {
     const opts = Object.assign({ includeDone: false }, options || {});
     const map = S.settings.gcalMap || (S.settings.gcalMap = {});
     const list = items(opts.includeDone);
-    let created = 0, updated = 0, failed = 0;
+    let created = 0, updated = 0, failed = 0, firstError = '';
     for (const item of list) {
       const body = eventFor(item);
       const existing = map[item.id];
@@ -1688,30 +1727,68 @@ PMO.gcal = (function () {
       } catch (e) {
         console.error(e);
         failed++;
+        if (!firstError) firstError = e.message;
         if (e.status === 401 || e.status === 403) { S.saveSettings(); throw e; }
       }
     }
     S.saveSettings();
-    return { created, updated, failed, total: list.length };
+    return { created, updated, failed, total: list.length, firstError };
   }
 
-  async function upcoming(days) {
-    const start = new Date(today() + 'T00:00:00');
-    const end = new Date(addDays(today(), days || 14) + 'T23:59:59');
-    const q = '?singleEvents=true&orderBy=startTime&maxResults=100&timeMin=' + encodeURIComponent(start.toISOString()) +
-      '&timeMax=' + encodeURIComponent(end.toISOString());
-    const res = await call('GET', '/calendars/' + calId() + '/events' + q);
-    return (res.items || []).map(e => ({
-      id: e.id,
-      title: e.summary || '（無標題）',
-      start: (e.start && (e.start.dateTime || e.start.date)) || '',
-      allDay: !!(e.start && e.start.date),
+  /* Deletes every event this tool created (the ones it remembers), e.g. after sample data was synced by mistake. */
+  async function removeAll() {
+    const map = S.settings.gcalMap || {};
+    let removed = 0, failed = 0;
+    for (const key of Object.keys(map)) {
+      try {
+        await call('DELETE', '/calendars/' + calId() + '/events/' + encodeURIComponent(map[key]));
+        removed++; delete map[key];
+      } catch (e) {
+        if (e.status === 404 || e.status === 410) { delete map[key]; removed++; continue; }
+        failed++;
+        if (e.status === 401 || e.status === 403) { S.saveSettings(); throw e; }
+      }
+    }
+    S.saveSettings();
+    return { removed, failed };
+  }
+
+  function toEvent(e) {
+    const allDay = !!(e.start && e.start.date);
+    const raw = (e.start && (e.start.dateTime || e.start.date)) || '';
+    let date = raw.slice(0, 10), time = '';
+    if (!allDay && raw) {
+      const d = new Date(raw);
+      date = d.getFullYear() + '-' + PMO.util.pad(d.getMonth() + 1) + '-' + PMO.util.pad(d.getDate());
+      time = PMO.util.pad(d.getHours()) + ':' + PMO.util.pad(d.getMinutes());
+    }
+    return {
+      id: e.id, title: e.summary || '（無標題）', start: raw, date, time, allDay,
       fromPmo: !!(e.extendedProperties && e.extendedProperties.private && e.extendedProperties.private.pmoId),
       link: e.htmlLink
-    }));
+    };
   }
 
-  return { prepare, ready, signIn, signOut, connected, sync, items, upcoming };
+  /* Events between two local dates (inclusive). */
+  async function range(fromDate, toDate) {
+    const start = new Date(fromDate + 'T00:00:00');
+    const end = new Date(toDate + 'T23:59:59');
+    const out = [];
+    let pageToken = '';
+    for (let i = 0; i < 5; i++) {
+      const q = '?singleEvents=true&orderBy=startTime&maxResults=250&timeMin=' + encodeURIComponent(start.toISOString()) +
+        '&timeMax=' + encodeURIComponent(end.toISOString()) + (pageToken ? '&pageToken=' + encodeURIComponent(pageToken) : '');
+      const res = await call('GET', '/calendars/' + calId() + '/events' + q);
+      (res.items || []).forEach(e => { if (e.status !== 'cancelled') out.push(toEvent(e)); });
+      if (!res.nextPageToken) break;
+      pageToken = res.nextPageToken;
+    }
+    return out;
+  }
+
+  async function upcoming(days) { return range(today(), addDays(today(), days || 14)); }
+
+  return { prepare, ready, signIn, signOut, connected, sync, removeAll, items, upcoming, range };
 })();
 
 </script>
@@ -2911,7 +2988,8 @@ PMO.views.calendar = (function () {
   const { esc, fmtDate } = PMO.util;
   const ui = PMO.ui;
   let events = null;
-  let lastResult = null;
+  let lastResult = null; // { ok, text }
+  let removeArmed = false;
 
   function render() {
     const hasId = !!S.settings.googleClientId;
@@ -2944,8 +3022,9 @@ PMO.views.calendar = (function () {
           <button class="btn primary" data-act="sync" ${!hasId || isFile ? 'disabled' : ''}>同步未完成的項目</button>
           <button class="btn" data-act="sync-all" ${!hasId || isFile ? 'disabled' : ''}>連已完成的一起同步</button>
           <button class="btn ghost" data-act="ics">改用 .ics 檔匯出</button>
+          <button class="btn ghost danger" data-act="remove-all" ${!hasId || isFile || !mapped ? 'disabled' : ''}>${removeArmed ? '再按一次：確定移除' : '從日曆移除同步過的事件'}</button>
         </div>
-        ${lastResult ? `<div class="notice ok" style="margin-top:12px">${esc(lastResult)}</div>` : ''}
+        ${lastResult ? `<div class="notice ${lastResult.ok ? 'ok' : ''}" style="margin-top:12px"><b>${lastResult.ok ? '完成' : '沒有完成'}</b> ${esc(lastResult.text)} <button class="btn sm ghost" data-act="clear-msg">關閉</button></div>` : ''}
         <p class="hint">只會寫入你選的日曆，事件標題會標上 [單位] 或 [任務]、[追回覆]。在工具裡刪掉項目，不會自動刪除日曆上的事件。.ics 匯出目前只包含里程碑。</p>
       </section>
       <section class="panel">
@@ -2957,7 +3036,7 @@ PMO.views.calendar = (function () {
 
   function mount(root) {
     // Load Google's sign-in script now, so tapping "連接 Google" can open the popup immediately (phones block late popups).
-    PMO.gcal.prepare().catch(err => { lastResult = err.message; });
+    PMO.gcal.prepare().catch(err => { lastResult = { ok: false, text: err.message }; });
     root.onchange = e => {
       const c = e.target.closest('[data-inc]');
       if (!c) return;
@@ -2967,20 +3046,36 @@ PMO.views.calendar = (function () {
       const a = e.target.closest('[data-act]');
       if (!a || a.disabled) return;
       const act = a.dataset.act;
+      if (act === 'clear-msg') { lastResult = null; PMO.app.render(); return; }
+      if (act !== 'remove-all') removeArmed = false;
+      if (act === 'remove-all' && !removeArmed) { removeArmed = true; PMO.app.render(); return; }
       if (act === 'ics') { PMO.backup.exportICS(); ui.toast('已下載 .ics 檔，可以匯入 Google、Outlook 或 Apple 日曆'); return; }
       a.disabled = true;
       try {
-        if (act === 'connect') { await PMO.gcal.signIn(); ui.toast('已連接 Google 日曆'); events = await PMO.gcal.upcoming(14); }
+        if (act === 'connect') {
+          await PMO.gcal.signIn();
+          lastResult = { ok: true, text: '已連接 Google 日曆，可以開始同步了。' };
+          ui.toast('已連接 Google 日曆');
+          events = await PMO.gcal.upcoming(14);
+        }
         if (act === 'sync' || act === 'sync-all') {
           ui.toast('同步中…');
           const r = await PMO.gcal.sync({ includeDone: act === 'sync-all' });
-          lastResult = `同步完成：新增 ${r.created}、更新 ${r.updated}${r.failed ? '、失敗 ' + r.failed : ''}（共 ${r.total} 個）`;
+          lastResult = r.failed
+            ? { ok: false, text: `新增 ${r.created}、更新 ${r.updated}，有 ${r.failed} 個沒有同步成功。原因：${r.firstError}` }
+            : { ok: true, text: `同步完成：新增 ${r.created}、更新 ${r.updated}（共 ${r.total} 項）` };
           events = await PMO.gcal.upcoming(14);
         }
         if (act === 'refresh') events = await PMO.gcal.upcoming(14);
+        if (act === 'remove-all') {
+          removeArmed = false;
+          const r = await PMO.gcal.removeAll();
+          lastResult = { ok: !r.failed, text: `已從日曆移除 ${r.removed} 個同步過的事件${r.failed ? '，' + r.failed + ' 個沒有移除成功' : ''}。` };
+          events = await PMO.gcal.upcoming(14);
+        }
       } catch (err) {
         ui.toast(err.message);
-        lastResult = '沒有完成：' + err.message;
+        lastResult = { ok: false, text: err.message };
       }
       PMO.app.render();
     };
@@ -3531,6 +3626,212 @@ PMO.views.quotes = (function () {
       if (a.dataset.act === 'fav') { PMO.quotes.toggleFav(a.dataset.id); PMO.app.render(); }
       if (a.dataset.act === 'add') { await PMO.quotes.edit(null); PMO.app.render(); }
       if (a.dataset.act === 'edit') { await PMO.quotes.edit((S.data.quotes || []).find(q => q.id === a.dataset.id)); PMO.app.render(); }
+    };
+  }
+
+  return { render, mount };
+})();
+
+</script>
+  <script>
+/* ---- js/views/schedule.js ---- */
+/* 行事曆：month grid with everything that has a date, the selected day's list, and this week's schedule.
+   Sources: tasks (due), milestones, follow-ups (chase date), routines (every occurrence), and Google Calendar events when connected. */
+PMO.views = PMO.views || {};
+
+PMO.views.schedule = (function () {
+  const S = PMO.store;
+  const P = PMO.parts;
+  const { esc, today, addDays, parseDate, pad, fmtDate } = PMO.util;
+  const ui = PMO.ui;
+  const WD = ['一', '二', '三', '四', '五', '六', '日'];
+  const KIND = {
+    task: '任務', ms: '里程碑', follow: '追回覆', routine: '例行', google: '日曆'
+  };
+
+  let cursor = today().slice(0, 7);   // YYYY-MM shown in the grid
+  let selected = today();
+  // On Saturday and Sunday the coming week is more useful than the one that is ending.
+  let weekShift = [0, 6].includes(new Date().getDay()) ? 1 : 0;
+  const gCache = {};                  // 'from|to' -> events
+  let gLoading = false;
+  let gError = '';
+  let gFailedKey = '';               // range that last failed; not retried until 重新讀取日曆
+
+  const ymd = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  function mondayOf(dateStr) { const d = parseDate(dateStr); const wd = (d.getDay() + 6) % 7; d.setDate(d.getDate() - wd); return ymd(d); }
+
+  function gridRange() {
+    const first = cursor + '-01';
+    const start = mondayOf(first);
+    const lastDay = new Date(Number(cursor.slice(0, 4)), Number(cursor.slice(5, 7)), 0);
+    const end = addDays(mondayOf(ymd(lastDay)), 6);
+    return { start, end };
+  }
+
+  function routineDates(r, from, to) {
+    const out = [];
+    let probe = Object.assign({}, r);
+    for (let i = 0; i < 60; i++) {
+      const next = S.routineNext(probe);
+      if (!next || next > to) break;
+      if (next >= from) out.push(next);
+      probe = Object.assign({}, r, { lastDone: next });
+    }
+    return out;
+  }
+
+  /* All dated items between two dates, as { date, kind, sort, ...ref }. */
+  function collect(from, to) {
+    const d = S.data;
+    const out = [];
+    const inR = x => x && x >= from && x <= to;
+    d.tasks.forEach(t => { if (t.triaged !== false && inR(t.due)) out.push({ date: t.due, kind: 'task', ref: t, done: t.status === 'done' }); });
+    S.allMilestones().forEach(x => { if (inR(x.m.date)) out.push({ date: x.m.date, kind: 'ms', ref: x, done: x.m.done }); });
+    d.followups.forEach(f => { if (f.status === 'waiting' && inR(f.nudgeOn)) out.push({ date: f.nudgeOn, kind: 'follow', ref: f }); });
+    d.routines.forEach(r => routineDates(r, from, to).forEach(dt => out.push({ date: dt, kind: 'routine', ref: r })));
+    const g = gCache[from + '|' + to] || gCache[gKey()] || [];
+    g.forEach(e => { if (!e.fromPmo && inR(e.date)) out.push({ date: e.date, kind: 'google', ref: e, time: e.time }); });
+    const order = { google: 0, ms: 1, task: 2, follow: 3, routine: 4 };
+    return out.sort((a, b) => a.date.localeCompare(b.date) || (a.time || '').localeCompare(b.time || '') || order[a.kind] - order[b.kind]);
+  }
+
+  function gKey() { const r = gridRange(); const w = addDays(mondayOf(selected), weekShift * 7); const s = w < r.start ? w : r.start; const e = addDays(w, 6) > r.end ? addDays(w, 6) : r.end; return s + '|' + e; }
+
+  function loadGoogle() {
+    if (!PMO.gcal.connected() || gLoading) return;
+    const key = gKey();
+    if (gCache[key] || gFailedKey === key) return;
+    const [from, to] = key.split('|');
+    gLoading = true; gError = '';
+    PMO.gcal.range(from, to).then(evs => { gCache[key] = evs; gFailedKey = ''; }).catch(err => {
+      gFailedKey = key;
+      gError = err.status === 404 ? '找不到這個日曆。請到「設定」檢查日曆 ID（用主日曆就填 primary）。'
+        : err.status === 403 ? '沒有讀取這個日曆的權限，或 Google Calendar API 還沒啟用。'
+        : err.message;
+    })
+      .finally(() => { gLoading = false; if (location.hash.startsWith('#/schedule')) PMO.app.render(); });
+  }
+
+  function itemRow(it) {
+    if (it.kind === 'task') return P.taskRow(it.ref);
+    if (it.kind === 'follow') return P.followRow(it.ref);
+    if (it.kind === 'routine') return P.routineRow(it.ref);
+    if (it.kind === 'ms') {
+      const { m, p } = it.ref;
+      return `<li><span class="kind-dot k-ms" aria-hidden="true"></span>
+        <span class="grow ${m.done ? 'done-text' : ''}">${esc(m.title)}<span class="row-meta"><span class="pill tag">里程碑</span>${P.unitTag(p.buId)}<a class="small" href="#/project/${esc(p.id)}">${esc(p.name)}</a></span></span></li>`;
+    }
+    const e = it.ref;
+    return `<li><span class="kind-dot k-google" aria-hidden="true"></span>
+      <span class="date">${e.allDay ? '整天' : esc(e.time)}</span>
+      <span class="grow">${esc(e.title)}<span class="row-meta"><span class="small muted">Google 日曆</span>${e.link ? `<a class="small" href="${esc(e.link)}" target="_blank" rel="noopener">在日曆打開</a>` : ''}</span></span></li>`;
+  }
+
+  function dayLabel(dt) {
+    const d = parseDate(dt);
+    const n = PMO.util.daysBetween(today(), dt);
+    const rel = n === 0 ? '今天' : n === 1 ? '明天' : n === -1 ? '昨天' : '';
+    return fmtDate(dt).slice(5) + '（週' + WD[(d.getDay() + 6) % 7] + '）' + (rel ? '・' + rel : '');
+  }
+
+  function render() {
+    const t = today();
+    const { start, end } = gridRange();
+    const weekStart = addDays(mondayOf(selected), weekShift * 7);
+    const weekEnd = addDays(weekStart, 6);
+    const all = collect(start < weekStart ? start : weekStart, end > weekEnd ? end : weekEnd);
+    const byDate = {};
+    all.forEach(it => { (byDate[it.date] = byDate[it.date] || []).push(it); });
+
+    const cells = [];
+    for (let dt = start; dt <= end; dt = addDays(dt, 1)) {
+      const items = byDate[dt] || [];
+      const kinds = [...new Set(items.map(i => i.kind))].slice(0, 4);
+      const inMonth = dt.slice(0, 7) === cursor;
+      cells.push(`<button type="button" class="cal-cell ${inMonth ? '' : 'out'} ${dt === t ? 'is-today' : ''} ${dt === selected ? 'is-sel' : ''}"
+        data-act="pick" data-d="${dt}" aria-label="${dayLabel(dt)}，${items.length} 項" aria-pressed="${dt === selected}">
+        <span class="cal-num">${Number(dt.slice(8))}</span>
+        <span class="cal-dots">${kinds.map(k => `<i class="kind-dot k-${k}"></i>`).join('')}</span>
+        ${items.length ? `<span class="cal-count">${items.length}</span>` : ''}</button>`);
+    }
+
+    const dayItems = byDate[selected] || [];
+    const week = [];
+    for (let i = 0; i < 7; i++) week.push(addDays(weekStart, i));
+    const weekCount = week.reduce((n, dt) => n + (byDate[dt] || []).length, 0);
+    const [y, m] = cursor.split('-');
+
+    const gNote = !S.settings.googleClientId ? '還沒設定 Google 日曆，目前只顯示工作台裡的項目。'
+      : !PMO.gcal.connected() ? '尚未連接 Google，所以沒有顯示 Google 日曆上的行程。'
+      : gLoading ? '正在讀取 Google 日曆…' : gError ? 'Google 日曆讀取失敗：' + gError + ' 工作台裡的項目照常顯示。' : '';
+
+    const html = `
+      <div class="page-head"><div><h1>行事曆</h1><p>工作台裡有日期的事情${PMO.gcal.connected() ? '和 Google 日曆上的行程' : ''}都在這裡。點一天看當天的安排。</p></div>
+        <div class="actions">${S.settings.googleClientId && !PMO.gcal.connected() ? '<button class="btn" data-act="connect">連接 Google</button>' : ''}
+          ${PMO.gcal.connected() ? '<button class="btn" data-act="reload">重新讀取日曆</button>' : ''}</div></div>
+      ${gNote ? `<p class="hint" style="margin:0">${esc(gNote)}</p>` : ''}
+
+      <section class="panel cal">
+        <div class="cal-head">
+          <button class="btn sm ghost" data-act="prev" aria-label="上個月">‹</button>
+          <h2>${y} 年 ${Number(m)} 月</h2>
+          <button class="btn sm ghost" data-act="next" aria-label="下個月">›</button>
+          <button class="btn sm" data-act="today">今天</button>
+        </div>
+        <div class="cal-grid" role="grid">
+          ${WD.map(w => `<div class="cal-wd">${w}</div>`).join('')}
+          ${cells.join('')}
+        </div>
+        <div class="cal-legend">${Object.keys(KIND).map(k => `<span><i class="kind-dot k-${k}"></i>${KIND[k]}</span>`).join('')}</div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>${dayLabel(selected)}</h2><button class="btn sm" data-act="add-task">＋ 這天的任務</button></div>
+        ${dayItems.length ? `<ul class="list">${dayItems.map(itemRow).join('')}</ul>` : '<p class="empty">這天沒有安排。</p>'}
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>${weekStart <= t && t <= weekEnd ? '這一週' : weekStart > t ? (weekShift === 1 || mondayOf(t) === addDays(weekStart, -7) ? '下一週' : '之後的一週') : '之前的一週'}（${fmtDate(weekStart).slice(5)}–${fmtDate(weekEnd).slice(5)}）</h2>
+          <div class="actions"><span class="small muted">${weekCount} 項</span>
+            <button class="btn sm ghost" data-act="wprev" aria-label="上一週">‹</button>
+            <button class="btn sm ghost" data-act="wnext" aria-label="下一週">›</button></div></div>
+        <div class="week">
+          ${week.map(dt => {
+            const items = byDate[dt] || [];
+            return `<div class="week-day ${dt === t ? 'is-today' : ''} ${items.length ? '' : 'is-empty'}">
+              <button type="button" class="week-label" data-act="pick" data-d="${dt}">${dayLabel(dt)}</button>
+              ${items.length ? `<ul class="list">${items.map(itemRow).join('')}</ul>` : '<span class="small muted">沒有安排</span>'}
+            </div>`;
+          }).join('')}
+        </div>
+      </section>`;
+    return { title: '行事曆', html };
+  }
+
+  function mount(root) {
+    PMO.gcal.prepare().catch(() => {});
+    loadGoogle();
+    root.onclick = async e => {
+      if (await P.handle(e)) return;
+      const a = e.target.closest('[data-act]');
+      if (!a) return;
+      const act = a.dataset.act;
+      if (act === 'wprev' || act === 'wnext') { weekShift += act === 'wnext' ? 1 : -1; PMO.app.render(); return; }
+      if (act === 'pick') { weekShift = 0; selected = a.dataset.d; if (selected.slice(0, 7) !== cursor) cursor = selected.slice(0, 7); PMO.app.render(); }
+      if (act === 'prev' || act === 'next') {
+        const d = new Date(Number(cursor.slice(0, 4)), Number(cursor.slice(5, 7)) - 1 + (act === 'next' ? 1 : -1), 1);
+        cursor = ymd(d).slice(0, 7);
+        selected = cursor === today().slice(0, 7) ? today() : cursor + '-01';
+        PMO.app.render();
+      }
+      if (act === 'today') { cursor = today().slice(0, 7); selected = today(); weekShift = [0, 6].includes(new Date().getDay()) ? 1 : 0; PMO.app.render(); }
+      if (act === 'add-task') { await PMO.edit.task(null, { due: selected }); PMO.app.render(); }
+      if (act === 'reload') { Object.keys(gCache).forEach(k => delete gCache[k]); gFailedKey = ''; gError = ''; PMO.app.render(); }
+      if (act === 'connect') {
+        try { await PMO.gcal.signIn(); ui.toast('已連接 Google 日曆'); } catch (err) { ui.toast(err.message); }
+        PMO.app.render();
+      }
     };
   }
 
