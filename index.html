@@ -214,10 +214,13 @@ textarea { resize: vertical; min-height: 72px; line-height: 1.5; padding: 8px 10
 input[type="text"], input[type="date"], input[type="number"], input[type="password"], input[type="url"], select {
   height: 40px; padding: 0 10px; line-height: 1.2;
 }
-input[type="date"] { -webkit-appearance: none; appearance: none; display: block; text-align: left; position: relative; }
+input[type="date"] { -webkit-appearance: none; appearance: none; display: block; text-align: left; position: relative;
+  max-width: 100%; line-height: 38px; padding-top: 0; padding-bottom: 0; }
+/* iPhone Safari centres the date and can drop its height when empty; pin both */
+input[type="date"]::-webkit-date-and-time-value { text-align: left; margin: 0; line-height: inherit; min-height: 1.2em; }
+input[type="date"]::-webkit-datetime-edit { padding: 0; line-height: inherit; }
 input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); margin: 0; opacity: .6; cursor: pointer; }
 input[type="date"]::-webkit-datetime-edit { padding-right: 24px; }
-input[type="date"]::-webkit-date-and-time-value { text-align: left; margin: 0; }
 select {
   -webkit-appearance: none; appearance: none; padding-right: 30px; text-overflow: ellipsis;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%237b8a87' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
@@ -373,6 +376,7 @@ button, a, input, select, label { touch-action: manipulation; }
   /* iOS zooms the page when a field under 16px gets focus; that zoom is what makes the page feel like it floats */
   input[type="text"], input[type="date"], input[type="number"], input[type="password"], input[type="url"], select, textarea { font-size: 16px; }
   input[type="text"], input[type="date"], input[type="number"], input[type="password"], input[type="url"], select { height: 44px; }
+  input[type="date"] { line-height: 42px; }
   .topbar { position: static; }
   .btn { min-height: 40px; padding: 8px 14px; }
   .btn.sm { min-height: 36px; padding: 6px 12px; font-size: .88rem; }
@@ -480,6 +484,11 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
 @media (max-width: 640px) { .mt-action-row { grid-template-columns: 1fr 1fr; } }
 #modal-body .field-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .nav-version { font-size: .75rem; color: var(--muted); margin: 14px 10px 4px; }
+
+/* Alignment fixes */
+.btn { white-space: nowrap; }
+.chat-input .btn { flex: none; }
+.panel-head > .actions { margin-left: auto; align-items: center; }
 
 </style>
 </head>
@@ -4046,7 +4055,7 @@ PMO.views.backup = (function () {
       </section>
       <section class="panel">
         <h2>還原備份</h2>
-        <div class="field"><label for="import-file">選擇備份檔（.json）</label><input type="file" id="import-file" accept="application/json,.json"></div>
+        <div class="field"><span class="small muted">備份檔（.json）</span><label class="btn" for="import-file" style="align-self:flex-start">選擇備份檔</label><input type="file" id="import-file" accept="application/json,.json" class="sr-only"><span class="small muted" id="import-name"></span></div>
         ${pending ? `<div class="notice ok">讀到 ${pending.data.bus.length} 個單位、${(pending.data.tasks || []).length} 個任務、${pending.data.projects.length} 個專案${pending.settings ? '，含設定' : ''}。要怎麼匯入？</div>
           <div class="actions" style="margin-top:10px">
             <button class="btn primary" data-act="merge">合併（保留現有，同 ID 以檔案為準）</button>
@@ -4084,6 +4093,7 @@ PMO.views.backup = (function () {
     root.querySelector('#import-file').onchange = async e => {
       const file = e.target.files[0];
       if (!file) return;
+      const nm = document.getElementById('import-name'); if (nm) nm.textContent = file.name;
       try {
         pending = PMO.backup.parseBackup(await readFile(file));
       } catch (err) {
