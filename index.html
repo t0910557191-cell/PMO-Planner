@@ -345,6 +345,55 @@ ul.plain li { margin: 4px 0; }
   .list li .grow { flex-basis: 140px; }
 }
 
+/* ---- Phone comfort: no zoom on focus, nothing sticky in the way, bigger touch targets, steady dialogs ---- */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+button, a, input, select, label { touch-action: manipulation; }
+@media (max-width: 640px) {
+  /* iOS zooms the page when a field under 16px gets focus; that zoom is what makes the page feel like it floats */
+  input[type="text"], input[type="date"], input[type="number"], input[type="password"], input[type="url"], select, textarea { font-size: 16px; }
+  .topbar { position: static; }
+  .btn { min-height: 40px; padding: 8px 14px; }
+  .btn.sm { min-height: 36px; padding: 6px 12px; font-size: .88rem; }
+  .row-actions { gap: 8px; }
+  .check { width: 22px; height: 22px; margin-top: 1px; }
+  .list li { padding: 12px 0; gap: 10px 12px; }
+  .seg button { padding: 9px 12px; }
+  .chip { padding: 7px 12px; }
+  nav a, .nav-add { padding: 10px 10px; }
+  /* Dialog becomes a fixed sheet pinned to the top, so the keyboard cannot push it around */
+  dialog { position: fixed; inset: calc(8px + env(safe-area-inset-top, 0px)) 0 auto 0; margin: 0 auto; width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px - env(safe-area-inset-top, 0px)); }
+  dialog form { padding: 16px; }
+  #modal-body { max-height: calc(100dvh - 170px - env(safe-area-inset-top, 0px)); overscroll-behavior: contain; }
+  .modal-actions { position: sticky; bottom: 0; background: var(--surface); padding-top: 10px; }
+  .modal-actions .btn { flex: 1; }
+  .modal-actions .spacer { display: none; }
+  #toast { bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
+}
+@media (hover: none) {
+  nav a:hover, .nav-add:hover, .bar-row:hover, .btn.ghost:hover { background: transparent; }
+  nav a.active:hover { background: var(--accent-soft); }
+  .bar-row.on:hover { background: var(--surface-2); }
+  .btn:hover { background: var(--surface); }
+  .btn.primary:hover { background: var(--accent); filter: none; }
+}
+
+/* Quotes */
+.quote-card { background: var(--surface); border-left: 4px solid var(--warm); }
+.quote-card .panel-head select { width: auto; max-width: 55%; }
+.quote-text { margin: 0; font-family: var(--display); font-size: 1.15rem; line-height: 1.7; color: var(--ink); text-wrap: pretty; }
+.quote-meta { display: flex; flex-direction: column; gap: 4px; margin: 10px 0 12px; }
+.quote-line { font-family: var(--display); }
+.chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.source-toggles { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px 16px; }
+.source-toggle { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; padding: 6px 0; }
+.source-toggle input { margin-top: 4px; accent-color: var(--accent); width: 18px; height: 18px; flex: none; }
+a.btn { text-decoration: none; display: inline-flex; align-items: center; }
+/* Origin helper */
+.origin-box { margin-top: 6px; padding: 10px 12px; border-radius: 8px; background: var(--accent-soft); display: flex; flex-direction: column; gap: 6px; }
+.origin-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.origin-row code { font-size: .95rem; background: var(--surface); padding: 4px 8px; border-radius: 6px; overflow-wrap: anywhere; }
+
 </style>
 </head>
 <body>
@@ -375,6 +424,7 @@ ul.plain li { margin: 4px 0; }
           <div class="nav-label">記錄與成長</div>
           <a href="#/questions" data-nav="questions">問題清單</a>
           <a href="#/wins" data-nav="wins">成果紀錄</a>
+          <a href="#/quotes" data-nav="quotes">格言</a>
           <a href="#/rituals" data-nav="rituals">慢半拍儀式</a>
         </div>
         <div class="nav-group">
@@ -592,7 +642,8 @@ PMO.store = (function () {
         impact: '讓後續儀表板只需要索取 12 份既有報表，不必另做新表。', tags: ['流程數位化', '數據分析'], english: '' }
     ];
     return {
-      schema: SCHEMA, bus, projects, tasks, followups, routines, indicators, wins,
+      schema: SCHEMA, bus, projects, tasks, followups, routines, indicators, wins, quotes: [],
+      quotePrefs: { off: [], favs: [], todaySource: 'all' },
       questions: [{ id: uid('q'), buId: 'u_rd', text: '開發追蹤表，主管希望先看哪三個指標？', status: 'parked', created: t, answer: '' }],
       rituals: { days: {}, weeks: {} },
       meta: { created: new Date().toISOString(), updated: new Date().toISOString(), lastBackup: null, isSample: true }
@@ -601,7 +652,8 @@ PMO.store = (function () {
 
   function emptyData() {
     return {
-      schema: SCHEMA, bus: [], projects: [], tasks: [], followups: [], routines: [], indicators: [], wins: [], questions: [],
+      schema: SCHEMA, bus: [], projects: [], tasks: [], followups: [], routines: [], indicators: [], wins: [], questions: [], quotes: [],
+      quotePrefs: { off: [], favs: [], todaySource: 'all' },
       rituals: { days: {}, weeks: {} },
       meta: { created: new Date().toISOString(), updated: new Date().toISOString(), lastBackup: null, isSample: false }
     };
@@ -644,6 +696,8 @@ PMO.store = (function () {
     out.indicators = arr(out.indicators).map(i => Object.assign({ buId: '', kind: 'lag', perspective: 'proc', unit: '', direction: 'up', target: null, warnPct: 10, driverOf: '', notes: '', values: [] }, i));
     out.wins = arr(out.wins).map(w => Object.assign({ buId: '', impact: '', tags: [], english: '' }, w));
     out.questions = arr(out.questions);
+    out.quotes = arr(out.quotes);
+    out.quotePrefs = Object.assign({ off: [], favs: [], todaySource: 'all' }, out.quotePrefs || {});
     out.rituals = Object.assign({ days: {}, weeks: {} }, out.rituals || {});
     out.meta = Object.assign(base.meta, out.meta || {});
     out.schema = SCHEMA;
@@ -797,6 +851,82 @@ PMO.store = (function () {
 
 </script>
   <script>
+/* ---- js/quotes-data.js ---- */
+/* Built-in principles for the daily card. Book-based entries are short summaries written in our own words (not quotations);
+   Sun Tzu lines are the classical text. Add your own exact quotes on the 格言 page. */
+PMO.quotesData = (function () {
+  const SOURCES = [
+    { id: 'inamori', name: '稻盛和夫', sub: '經營與心法' },
+    { id: 'rumelt', name: 'Richard Rumelt', sub: '《好策略・壞策略》' },
+    { id: 'martin', name: 'Roger Martin', sub: '《A New Way to Think》《Playing to Win》' },
+    { id: 'nvc', name: '馬歇爾・盧森堡', sub: '《非暴力溝通》' },
+    { id: 'sunzi', name: '孫子', sub: '《孫子兵法》原文' },
+    { id: 'drucker', name: '彼得・杜拉克', sub: '管理與自我管理' },
+    { id: 'pfeffer', name: 'Jeffrey Pfeffer', sub: '《Power》' },
+    { id: 'robbins', name: 'Mel Robbins', sub: '《Let Them》' },
+    { id: 'mine', name: '我的格言', sub: '自己加的' }
+  ];
+
+  const L = (source, text, tip) => ({ source, text, tip: tip || '' });
+  const LIST = [
+    L('inamori', '人生與工作的結果，等於思考方式 × 熱情 × 能力。能力和熱情再高，思考方式一偏，結果就會是負的。', '今天做決定前，先檢查自己的出發點。'),
+    L('inamori', '判斷事情時，先問「作為一個人，什麼是正確的」，而不是「怎麼做對我最有利」。'),
+    L('inamori', '動機要善，私心要少。做重大決定前，問自己：這是為了整體，還是為了自己？'),
+    L('inamori', '付出不輸給任何人的努力，把眼前的事一件一件做踏實，就是最可靠的路。'),
+    L('inamori', '經營的原則很簡單：營收做到最大，費用壓到最小。', '看任何一個專案，都可以先問它對這兩件事的影響。'),
+    L('inamori', '把組織切成小單位，讓每個人都看得見自己那一塊的收支，人就會像經營者一樣思考。'),
+    L('inamori', '構想時樂觀，計畫時悲觀，執行時再回到樂觀。'),
+    L('inamori', '把想做到的事想得夠清楚、夠具體，清楚到像是已經看見結果一樣。'),
+    L('inamori', '越順利的時候越要謙虛，困難的時候正好是磨練心性的機會。'),
+
+    L('rumelt', '好策略的核心有三個部分：看清問題的診斷、決定方向的指導方針、互相配合的具體行動。', '拿一件手上的事，試著用這三格寫一次。'),
+    L('rumelt', '目標不是策略。「明年成長兩成」只是願望，策略要回答「靠什麼做到」。'),
+    L('rumelt', '壞策略的徵兆：口號很多、不面對真正的難題、把一長串目標當成計畫。'),
+    L('rumelt', '策略的力量來自集中：找到最關鍵的那個點，把資源放在那裡。'),
+    L('rumelt', '說清楚「不做什麼」，和說清楚「要做什麼」一樣重要。'),
+    L('rumelt', '好的診斷會把複雜的情況簡化成一個可以處理的核心問題。'),
+
+    L('martin', '策略是一組互相整合的選擇：要在哪裡競爭，以及要怎麼贏。'),
+    L('martin', '不要先爭論哪個方案對，先問：「要有哪些條件成立，這個方案才會是好的？」', '開會卡住時，把爭論改成這個問題。'),
+    L('martin', '做完預算和計畫，不等於有了策略。計畫回答「要做哪些事」，策略回答「要放棄什麼、押注什麼」。'),
+    L('martin', '現有的方法行不通時，要換一個看問題的模型，而不是更用力地執行舊模型。'),
+    L('martin', '文化不是靠宣導改變的，而是改變大家每天實際工作和做決定的方式。'),
+    L('martin', '策略不是預測未來，而是讓你想要的未來比較有可能發生。'),
+    L('martin', '從顧客的角度看價值：他們真正在乎的是什麼，而不是我們覺得自己哪裡好。'),
+
+    L('nvc', '溝通的四個步驟：說出觀察、說出感受、說出需要、提出請求。'),
+    L('nvc', '把觀察和評論分開。說「這週有兩次資料晚了一天」，而不是「你都不準時」。', '今天傳訊息前，把形容詞換成事實。'),
+    L('nvc', '說自己的感受，不要說對方的錯。「我有點擔心」比「你害我」容易被聽進去。'),
+    L('nvc', '每一句抱怨背後，都有一個沒被滿足的需要。先聽出那個需要。'),
+    L('nvc', '請求要具體、可以做到，而且對方有說不的空間；不能說不的，就是要求。'),
+    L('nvc', '先讓對方覺得被聽見，他才有餘裕聽你說。'),
+
+    L('sunzi', '知彼知己，百戰不殆。'),
+    L('sunzi', '上兵伐謀，其次伐交，其次伐兵，其下攻城。', '先想怎麼讓問題不需要硬碰硬。'),
+    L('sunzi', '不戰而屈人之兵，善之善者也。'),
+    L('sunzi', '多算勝，少算不勝。', '重要的會議前，多準備一種情況。'),
+    L('sunzi', '兵者，國之大事，死生之地，存亡之道，不可不察也。'),
+
+    L('drucker', '效率是把事情做對，效能是做對的事情。先確認是對的事，再追求做得快。'),
+    L('drucker', '時間是最稀缺的資源。先記錄自己的時間花在哪裡，才知道要砍掉什麼。'),
+    L('drucker', '先問「這個情況需要我做什麼」，而不是「我想做什麼」。'),
+    L('drucker', '把注意力放在貢獻上：我能為整體的成果做出什麼貢獻？'),
+    L('drucker', '一次只做一件最重要的事，做完再做下一件。'),
+
+    L('pfeffer', '只做好事情還不夠，要讓關鍵的人看見、記得你做了什麼。'),
+    L('pfeffer', '到了一定層級，重要的關係就是要經營好，不管你對對方有什麼感覺。'),
+    L('pfeffer', '面對反對的人，給對方一個體面的台階，比贏過他更有用。'),
+    L('pfeffer', '不要替自己開不必要的戰場。先想清楚怎樣才算贏。'),
+
+    L('robbins', '別人要怎麼想、怎麼說，讓他們去。'),
+    L('robbins', '把力氣收回來，放在自己能決定的事：我的反應、我的選擇、我的下一步。')
+  ].map((q, i) => Object.assign({ id: 'b' + i }, q));
+
+  return { SOURCES, LIST };
+})();
+
+</script>
+  <script>
 /* ---- js/ui.js ---- */
 /* UI helpers: toast, modal forms, status pills. */
 PMO.ui = (function () {
@@ -884,8 +1014,9 @@ PMO.ui = (function () {
       dlg.onclose = () => { cleanup(); resolve(null); };
       delBtn.dataset.armed = ''; delBtn.textContent = '刪除';
       dlg.showModal();
+      // On phones, focusing a field opens the keyboard and shifts the dialog; let the person tap the field instead.
       const first = body.querySelector('input,select,textarea');
-      if (first) first.focus();
+      if (first && !window.matchMedia('(max-width: 640px)').matches) first.focus();
     });
   }
 
@@ -1224,7 +1355,12 @@ PMO.parts = (function () {
       case 'task-toggle': {
         const t = find('tasks'); if (!t) return true;
         t.status = a.checked ? 'done' : 'todo'; t.doneOn = a.checked ? today() : '';
-        S.save(); if (a.checked) ui.toast('完成：' + t.title); break;
+        S.save(); if (a.checked) ui.toast('完成：' + t.title);
+        // Update in place so the list does not jump; the item moves to "done" next time the page is opened.
+        const row = a.closest('li');
+        const text = row && row.querySelector('.grow');
+        if (text) text.classList.toggle('done-text', a.checked);
+        return true;
       }
       case 'task-edit': await PMO.edit.task(find('tasks')); break;
       case 'fu-done': { const f = find('followups'); if (f) { f.status = 'done'; f.receivedOn = today(); S.save(); ui.toast('已收到：' + f.what); } break; }
@@ -1283,7 +1419,7 @@ PMO.backup = (function () {
     } else {
       const cur = S.data;
       const inc = S.normalize(parsed.data);
-      ['bus', 'projects', 'tasks', 'followups', 'routines', 'indicators', 'wins', 'questions']
+      ['bus', 'projects', 'tasks', 'followups', 'routines', 'indicators', 'wins', 'questions', 'quotes']
         .forEach(k => inc[k].forEach(x => S.upsert(cur[k], x)));
       Object.assign(cur.rituals.days, inc.rituals.days);
       Object.assign(cur.rituals.weeks, inc.rituals.weeks);
@@ -1829,6 +1965,8 @@ PMO.views.today = (function () {
         </form>
       </section>
 
+      ${PMO.quotes.card()}
+
       ${d.meta.isSample ? `<div class="notice"><b>這是範例資料。</b> 單位、任務都可以直接改或刪除；到「備份與匯出」可以清空重來。公司機密請不要記在這裡。 <button class="btn sm" data-act="dismiss-sample">知道了</button></div>` : ''}
 
       <div class="grid-2">
@@ -1898,9 +2036,11 @@ PMO.views.today = (function () {
       capture(text, root.querySelector('#cap-kind').value, root.querySelector('#cap-unit').value);
       PMO.app.render();
       const again = document.getElementById('cap-text');
-      if (again) again.focus();
+      if (again) again.focus({ preventScroll: true });
     };
+    PMO.quotes.bindSelect(root);
     root.onclick = async e => {
+      if (PMO.quotes.handle(e)) return;
       if (await P.handle(e)) return;
       const a = e.target.closest('[data-act="dismiss-sample"]');
       if (a) { S.data.meta.isSample = false; S.save(); PMO.app.render(); }
@@ -3106,7 +3246,11 @@ PMO.views.settings = (function () {
           <h2>Google 日曆</h2>
           <div class="field"><label for="s_gid">OAuth Client ID</label>
             <input type="text" id="s_gid" name="googleClientId" value="${esc(s.googleClientId)}" placeholder="xxxxxxxx.apps.googleusercontent.com">
-            <div class="hint">在 Google Cloud Console 建立「網頁應用程式」類型的 OAuth 用戶端，已授權的 JavaScript 來源填：<span class="mono">${esc(origin)}</span></div></div>
+            <div class="origin-box">
+              <div class="small">Google Cloud「已授權的 JavaScript 來源」要填的就是這一行，一字不差：</div>
+              <div class="origin-row"><code id="origin-text">${esc(origin)}</code>${location.protocol === 'file:' ? '' : '<button type="button" class="btn sm" data-act="copy-origin">複製</button>'}</div>
+              <div class="hint">注意：不要加 /strategy-pmo 這類路徑、結尾不要有斜線、要填在「JavaScript 來源」不是「重新導向 URI」。改完通常要等 5 分鐘，有時更久才生效。</div>
+            </div></div>
           <div class="field"><label for="s_gcal">日曆 ID</label>
             <input type="text" id="s_gcal" name="gcalCalendarId" value="${esc(s.gcalCalendarId)}" placeholder="primary">
             <div class="hint">建議另外建一個「策略 PMO」日曆，把它的日曆 ID 貼在這裡。填 primary 會寫進主要日曆。</div></div>
@@ -3179,6 +3323,7 @@ PMO.views.settings = (function () {
       const a = e.target.closest('[data-act]');
       if (!a) return;
       const act = a.dataset.act;
+      if (act === 'copy-origin') { const ok = await PMO.util.copy(location.origin); ui.toast(ok ? '已複製：' + location.origin : '複製失敗，請手動選取'); }
       if (act === 'preset') {
         const p = PMO.ai.PRESETS[a.dataset.k];
         f.elements.openaiUrl.value = p.url; f.elements.openaiModel.value = p.model; f.elements.openaiAuth.value = p.auth;
@@ -3195,6 +3340,150 @@ PMO.views.settings = (function () {
         try { localStorage.removeItem('pmo.notified'); } catch (_) { /* ignore */ } PMO.notify.check();
         ui.toast(n ? '有 ' + n + ' 件到期，已送出通知' : '目前沒有到期的事');
       }
+    };
+  }
+
+  return { render, mount };
+})();
+
+</script>
+  <script>
+/* ---- js/views/quotes.js ---- */
+/* 格言：daily principle card helpers + the browse/manage page. */
+PMO.views = PMO.views || {};
+
+PMO.quotes = (function () {
+  const S = PMO.store;
+  const Q = PMO.quotesData;
+  const { esc, today, uid } = PMO.util;
+  let shift = 0;
+
+  function prefs() {
+    const d = S.data;
+    d.quotePrefs = Object.assign({ off: [], favs: [], todaySource: 'all' }, d.quotePrefs || {});
+    return d.quotePrefs;
+  }
+  function all() { return Q.LIST.concat((S.data.quotes || []).map(q => Object.assign({ source: 'mine' }, q))); }
+  function sourceName(id) { const s = Q.SOURCES.find(x => x.id === id); return s ? s.name : id; }
+  function pool() {
+    const p = prefs();
+    let list = all().filter(q => !p.off.includes(q.source));
+    if (p.todaySource === 'favs') list = all().filter(q => p.favs.includes(q.id));
+    else if (p.todaySource !== 'all') list = all().filter(q => q.source === p.todaySource);
+    return list;
+  }
+  function hash(s) { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return Math.abs(h); }
+  function pick() {
+    const list = pool();
+    if (!list.length) return null;
+    return list[(hash(today()) + shift) % list.length];
+  }
+
+  function card() {
+    const p = prefs();
+    const q = pick();
+    const fav = q && p.favs.includes(q.id);
+    const opts = [{ v: 'all', l: '全部來源' }, { v: 'favs', l: '只看收藏' }].concat(Q.SOURCES.map(s => ({ v: s.id, l: s.name })));
+    return `<section class="panel quote-card">
+      <div class="panel-head"><h2>今日格言</h2>
+        <select id="quote-source" aria-label="格言來源">${opts.map(o => `<option value="${o.v}" ${o.v === p.todaySource ? 'selected' : ''}>${esc(o.l)}</option>`).join('')}</select></div>
+      ${q ? `<blockquote class="quote-text">${esc(q.text)}</blockquote>
+        <div class="quote-meta"><span class="small muted">— ${esc(sourceName(q.source))}</span>${q.tip ? `<span class="small">今天可以試：${esc(q.tip)}</span>` : ''}</div>
+        <div class="actions"><button class="btn sm" data-act="quote-next">換一則</button>
+          <button class="btn sm ghost" data-act="quote-fav" data-id="${esc(q.id)}" aria-pressed="${fav}">${fav ? '★ 已收藏' : '☆ 收藏'}</button>
+          <a class="btn sm ghost" href="#/quotes">全部格言</a></div>`
+        : '<p class="empty">這個來源還沒有格言。到「全部格言」可以自己新增。</p>'}
+    </section>`;
+  }
+
+  // Handles the card's controls on any page; returns true when it handled the event.
+  function handle(e) {
+    const a = e.target.closest('[data-act]');
+    if (!a) return false;
+    if (a.dataset.act === 'quote-next') { shift++; PMO.app.render(); return true; }
+    if (a.dataset.act === 'quote-fav') { toggleFav(a.dataset.id); PMO.app.render(); return true; }
+    return false;
+  }
+  function bindSelect(root) {
+    const sel = root.querySelector('#quote-source');
+    if (sel) sel.onchange = e => { prefs().todaySource = e.target.value; shift = 0; S.save(); PMO.app.render(); };
+  }
+  function toggleFav(id) {
+    const p = prefs();
+    p.favs = p.favs.includes(id) ? p.favs.filter(x => x !== id) : p.favs.concat([id]);
+    S.save();
+  }
+
+  async function edit(existing) {
+    const cur = existing || {};
+    const r = await PMO.ui.form({
+      title: existing ? '編輯格言' : '新增我的格言',
+      allowDelete: !!existing,
+      fields: [
+        { name: 'text', label: '內容', type: 'textarea', value: cur.text, required: true },
+        { name: 'author', label: '出處（人名或書名）', value: cur.author, placeholder: '例如：讀書筆記、主管說過的話' },
+        { name: 'tip', label: '今天可以怎麼用（選填）', value: cur.tip }
+      ]
+    });
+    if (!r) return;
+    S.data.quotes = S.data.quotes || [];
+    if (r === 'delete') S.data.quotes = S.data.quotes.filter(q => q.id !== cur.id);
+    else S.upsert(S.data.quotes, Object.assign({ id: cur.id || uid('q') }, r));
+    S.save();
+  }
+
+  return { card, handle, bindSelect, prefs, all, sourceName, toggleFav, edit };
+})();
+
+PMO.views.quotes = (function () {
+  const S = PMO.store;
+  const Q = PMO.quotesData;
+  const { esc } = PMO.util;
+  let filter = 'all';
+
+  function render() {
+    const p = PMO.quotes.prefs();
+    const list = PMO.quotes.all().filter(q => filter === 'all' || (filter === 'favs' ? p.favs.includes(q.id) : q.source === filter));
+    const html = `
+      <div class="page-head"><div><h1>格言</h1><p>每天在「今天」頁輪播一則。可以只看某位作者、只看收藏，也可以加上自己的。</p></div>
+        <div class="actions"><button class="btn primary" data-act="add">＋ 我的格言</button></div></div>
+      <p class="hint" style="margin:0">書籍類的內容是用自己的話整理的重點，不是原文引用；《孫子兵法》為原文。想收錄書中的原句，可以用「我的格言」自己加。</p>
+      <section class="panel">
+        <h2>每日輪播要包含哪些來源</h2>
+        <div class="source-toggles">${Q.SOURCES.map(s => `<label class="source-toggle"><input type="checkbox" data-src="${s.id}" ${p.off.includes(s.id) ? '' : 'checked'}>
+          <span><b>${esc(s.name)}</b><br><span class="small muted">${esc(s.sub)}</span></span></label>`).join('')}</div>
+      </section>
+      <div class="toolbar"><div class="chips">
+        ${[{ v: 'all', l: '全部' }, { v: 'favs', l: '★ 收藏' }].concat(Q.SOURCES.map(s => ({ v: s.id, l: s.name }))).map(o =>
+          `<button class="chip ${filter === o.v ? 'on' : ''}" data-act="filter" data-v="${o.v}">${esc(o.l)}</button>`).join('')}
+      </div></div>
+      <section class="panel">
+        ${list.length ? `<ul class="list">${list.map(q => {
+          const fav = p.favs.includes(q.id);
+          return `<li><span class="grow"><span class="quote-line">${esc(q.text)}</span>
+            <span class="row-meta"><span class="small muted">— ${esc(q.source === 'mine' && q.author ? q.author : PMO.quotes.sourceName(q.source))}</span>${q.tip ? `<span class="small">今天可以試：${esc(q.tip)}</span>` : ''}</span></span>
+            <span class="row-actions"><button class="btn sm ghost" data-act="fav" data-id="${esc(q.id)}" aria-pressed="${fav}">${fav ? '★' : '☆'}</button>
+            ${q.source === 'mine' ? `<button class="btn sm ghost" data-act="edit" data-id="${esc(q.id)}">編輯</button>` : ''}</span></li>`;
+        }).join('')}</ul>` : '<p class="empty">沒有符合的格言。</p>'}
+      </section>`;
+    return { title: '格言', html };
+  }
+
+  function mount(root) {
+    root.onchange = e => {
+      const c = e.target.closest('[data-src]');
+      if (!c) return;
+      const p = PMO.quotes.prefs();
+      p.off = c.checked ? p.off.filter(x => x !== c.dataset.src) : p.off.concat([c.dataset.src]);
+      S.save();
+    };
+    root.onclick = async e => {
+      const a = e.target.closest('[data-act]');
+      if (!a) return;
+      if (a.dataset.act === 'filter') { filter = a.dataset.v; PMO.app.render(); }
+      if (a.dataset.act === 'fav') { PMO.quotes.toggleFav(a.dataset.id); PMO.app.render(); }
+      if (a.dataset.act === 'add') { await PMO.quotes.edit(null); PMO.app.render(); }
+      if (a.dataset.act === 'edit') { await PMO.quotes.edit((S.data.quotes || []).find(q => q.id === a.dataset.id)); PMO.app.render(); }
     };
   }
 
