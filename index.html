@@ -440,6 +440,13 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
 .holiday-list .date { font: inherit; background: none; border: 0; padding: 0; cursor: pointer; color: var(--accent); min-width: 5.5em; text-align: left; }
 .holiday-note { margin: 0 0 8px; font-size: .9rem; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 
+/* Holidays on the month grid: red dot; days off also get a red date number */
+:root { --k-holiday: #c94a3f; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --k-holiday: #ef8a7f; } }
+:root[data-theme="dark"] { --k-holiday: #ef8a7f; }
+.k-holiday { background: var(--k-holiday); }
+.cal-cell.is-off .cal-num { color: var(--k-holiday); font-weight: 600; }
+
 </style>
 </head>
 <body>
@@ -693,7 +700,7 @@ PMO.store = (function () {
       quotePrefs: { off: [], favs: [], todaySource: 'all' },
       questions: [{ id: uid('q'), buId: 'u_rd', text: '開發追蹤表，主管希望先看哪三個指標？', status: 'parked', created: t, answer: '' }],
       rituals: { days: {}, weeks: {} },
-      meta: { created: new Date().toISOString(), updated: new Date().toISOString(), lastBackup: null, isSample: true }
+      meta: { created: new Date().toISOString(), updated: new Date().toISOString(), lastBackup: null, isSample: true, sampleCleaned: true }
     };
   }
 
@@ -757,6 +764,7 @@ PMO.store = (function () {
   let settings = Object.assign({}, defaultSettings, storedSettings);
   settings.gcalInclude = Object.assign({}, defaultSettings.gcalInclude, storedSettings.gcalInclude || {});
   let saveOk = writeJSON(DATA_KEY, data);
+  let sampleCleanup = null;           // what the one-time cleanup removed, shown once on 今天
 
   function save() {
     data.meta.updated = new Date().toISOString();
@@ -881,19 +889,65 @@ PMO.store = (function () {
     data.questions = data.questions.filter(q => q.buId !== id);
     ['tasks', 'followups', 'routines', 'indicators', 'wins'].forEach(k => data[k].forEach(x => { if (x.buId === id) x.buId = ''; }));
   }
+  /* Removes the built-in sample items (matched by their exact titles) and keeps everything you added yourself.
+     The four sample units stay, since they may be in use; only their sample notes are cleared.
+     Items that were already synced to Google Calendar are queued so the next sync deletes those events. */
+  const SAMPLE = {
+    projects: ['管理報表資料盤點（範例）', '開發專案追蹤表（範例）'],
+    tasks: ['整理這週要跟主管報告的三個重點', '寄出資料需求清單給財務對口', '讀完一章管理會計的書', '想法：人資 KPI 可以先從招募週期開始'],
+    followups: ['月報欄位定義表', '開發案時程表'],
+    routines: ['月結後確認財務月報是否更新', '更新各單位 KPI 燈號', '季度成果整理（代表作紀錄）'],
+    indicators: ['資料需求清單完成度', '準時交付的週報比例', '等待回覆超過 5 天的件數'],
+    wins: ['整理出第一版資料需求清單（範例）'],
+    questions: ['開發追蹤表，主管希望先看哪三個指標？']
+  };
+  const textOf = { projects: 'name', tasks: 'title', followups: 'what', routines: 'title', indicators: 'name', wins: 'title', questions: 'text' };
+  function removeSample() {
+    const removedIds = [];
+    let count = 0;
+    Object.keys(SAMPLE).forEach(k => {
+      const keep = [];
+      data[k].forEach(x => {
+        const txt = String(x[textOf[k]] || '');
+        if (SAMPLE[k].includes(txt) || (k !== 'tasks' && /（範例）$/.test(txt))) {
+          count++;
+          removedIds.push(x.id);
+          if (k === 'projects') (x.milestones || []).forEach(m => removedIds.push(m.id));
+        } else keep.push(x);
+      });
+      data[k] = keep;
+    });
+    data.bus.forEach(b => { if (/^範例單位/.test(b.notes || '')) b.notes = ''; });
+    const map = settings.gcalMap || {};
+    const queued = removedIds.filter(id => map[id]);
+    if (queued.length) {
+      settings.gcalDelete = (settings.gcalDelete || []).concat(queued.map(id => map[id]));
+      queued.forEach(id => delete map[id]);
+      saveSettings();
+    }
+    data.meta.isSample = false;
+    data.meta.sampleCleaned = true;
+    save();
+    return { count, calendar: queued.length };
+  }
+
   function replaceAll(newData) { data = normalize(newData); save(); }
   function reset(withSample) { data = withSample ? sample() : emptyData(); save(); }
 
-  return {
+  const api = {
     STATUS, LEVEL, UNIT_TYPE, BSC, COMPETENCIES,
     get data() { return data; },
     get settings() { return settings; },
     get saveOk() { return saveOk; },
+    get sampleCleanup() { return sampleCleanup; },
+    clearSampleCleanupNote() { sampleCleanup = null; },
     save, saveSettings, onChange,
     bu, activeBus, buName, unitOptions, project, projectsOf, allMilestones, progress,
     quadrant, taskScore, taskUrgent, routineNext, indicatorLatest, indicatorLight, indicatorTrend,
-    upsert, removeBu, replaceAll, reset, normalize
+    upsert, removeBu, replaceAll, reset, normalize, removeSample
   };
+  if (!data.meta.sampleCleaned) { sampleCleanup = removeSample(); }
+  return api;
 })();
 
 </script>
@@ -1775,12 +1829,32 @@ PMO.gcal = (function () {
     };
   }
 
+  /* Deletes calendar events whose items were removed in the tool (e.g. the sample items). Returns how many were deleted. */
+  async function flushDeletes() {
+    const list = S.settings.gcalDelete || [];
+    let removed = 0;
+    const left = [];
+    for (const evId of list) {
+      try { await call('DELETE', '/calendars/' + calId() + '/events/' + encodeURIComponent(evId)); removed++; }
+      catch (e) {
+        if (e.status === 404 || e.status === 410) { removed++; continue; }
+        left.push(evId);
+        if (e.status === 401 || e.status === 403) { S.settings.gcalDelete = left.concat(list.slice(list.indexOf(evId) + 1)); S.saveSettings(); throw e; }
+      }
+    }
+    S.settings.gcalDelete = left;
+    S.saveSettings();
+    return removed;
+  }
+  function pendingDeletes() { return (S.settings.gcalDelete || []).length; }
+
   /* Pushes items to the chosen calendar. Updates existing events, recreates any that were deleted on the calendar side. */
   async function sync(options) {
     const opts = Object.assign({ includeDone: false }, options || {});
     const map = S.settings.gcalMap || (S.settings.gcalMap = {});
     const list = items(opts.includeDone);
     let created = 0, updated = 0, failed = 0, firstError = '';
+    const deleted = await flushDeletes();
     for (const item of list) {
       const body = eventFor(item);
       const existing = map[item.id];
@@ -1805,13 +1879,13 @@ PMO.gcal = (function () {
       }
     }
     S.saveSettings();
-    return { created, updated, failed, total: list.length, firstError };
+    return { created, updated, failed, total: list.length, firstError, deleted };
   }
 
   /* Deletes every event this tool created (the ones it remembers), e.g. after sample data was synced by mistake. */
   async function removeAll() {
     const map = S.settings.gcalMap || {};
-    let removed = 0, failed = 0;
+    let removed = await flushDeletes(), failed = 0;
     for (const key of Object.keys(map)) {
       try {
         await call('DELETE', '/calendars/' + calId() + '/events/' + encodeURIComponent(map[key]));
@@ -1862,7 +1936,7 @@ PMO.gcal = (function () {
 
   async function upcoming(days) { return range(today(), addDays(today(), days || 14)); }
 
-  return { prepare, ready, signIn, signOut, connected, sync, removeAll, items, upcoming, range };
+  return { prepare, ready, signIn, signOut, connected, sync, removeAll, flushDeletes, pendingDeletes, items, upcoming, range };
 })();
 
 </script>
@@ -2248,6 +2322,7 @@ PMO.views.today = (function () {
 
       ${PMO.quotes.card()}
 
+      ${S.sampleCleanup && S.sampleCleanup.count ? `<div class="notice ok"><b>範例資料已清掉了。</b> 移除了 ${S.sampleCleanup.count} 筆範例任務、專案、例行事項等，你自己新增的都還在；人資、財務、營運、產品研發四個單位保留，不需要可以到單位頁刪除。${S.sampleCleanup.calendar ? ` 有 ${S.sampleCleanup.calendar} 個範例曾同步到 Google 日曆，到「Google 日曆」按一次同步就會刪掉。` : ''} <button class="btn sm" data-act="dismiss-clean">知道了</button></div>` : ''}
       ${d.meta.isSample ? `<div class="notice"><b>這是範例資料。</b> 單位、任務都可以直接改或刪除；到「備份與匯出」可以清空重來。公司機密請不要記在這裡。 <button class="btn sm" data-act="dismiss-sample">知道了</button></div>` : ''}
 
       <div class="grid-2">
@@ -2323,6 +2398,7 @@ PMO.views.today = (function () {
     root.onclick = async e => {
       if (PMO.quotes.handle(e)) return;
       if (await P.handle(e)) return;
+      if (e.target.closest('[data-act="dismiss-clean"]')) { S.clearSampleCleanupNote(); PMO.app.render(); return; }
       const a = e.target.closest('[data-act="dismiss-sample"]');
       if (a) { S.data.meta.isSample = false; S.save(); PMO.app.render(); }
     };
@@ -3176,7 +3252,7 @@ PMO.views.calendar = (function () {
           <label class="small"><input type="checkbox" data-inc="followups" ${inc.followups !== false ? 'checked' : ''}> 追回覆的日子</label>
         </div>
         <p style="margin-top:0"><span class="light-pill ${PMO.gcal.connected() ? 'ok' : 'none'}">${PMO.gcal.connected() ? '已連接' : '尚未連接'}</span></p>
-        <p style="margin-top:0">待同步：${pending.length} 項・已對應到日曆：${mapped} 項</p>
+        <p style="margin-top:0">待同步：${pending.length} 項・已對應到日曆：${mapped} 項${PMO.gcal.pendingDeletes() ? `・<b>下次同步會從日曆刪掉 ${PMO.gcal.pendingDeletes()} 個範例事件</b>` : ''}</p>
         <div class="actions">
           <button class="btn" data-act="connect" ${!hasId || isFile ? 'disabled' : ''}>${PMO.gcal.connected() ? '重新授權' : '連接 Google'}</button>
           <button class="btn primary" data-act="sync" ${!hasId || isFile ? 'disabled' : ''}>同步未完成的項目</button>
@@ -3223,7 +3299,7 @@ PMO.views.calendar = (function () {
           const r = await PMO.gcal.sync({ includeDone: act === 'sync-all' });
           lastResult = r.failed
             ? { ok: false, text: `新增 ${r.created}、更新 ${r.updated}，有 ${r.failed} 個沒有同步成功。原因：${r.firstError}` }
-            : { ok: true, text: `同步完成：新增 ${r.created}、更新 ${r.updated}（共 ${r.total} 項）` };
+            : { ok: true, text: `同步完成：新增 ${r.created}、更新 ${r.updated}（共 ${r.total} 項）${r.deleted ? `，並從日曆刪掉 ${r.deleted} 個已移除項目的事件` : ''}` };
           events = await PMO.gcal.upcoming(14);
         }
         if (act === 'refresh') events = await PMO.gcal.upcoming(14);
@@ -3464,6 +3540,7 @@ PMO.views.backup = (function () {
         <p style="margin-top:0">清除這個瀏覽器裡的所有工作資料（設定與金鑰會保留）。建議先下載備份。</p>
         <div class="actions">
           <button class="btn danger" data-act="wipe">${resetArmed ? '再按一次：確定清空' : '清空所有資料'}</button>
+          <button class="btn" data-act="unsample">只移除範例資料</button>
           <button class="btn ghost" data-act="sample">載入範例資料</button>
         </div>
       </section>`;
@@ -3500,6 +3577,7 @@ PMO.views.backup = (function () {
         if (!resetArmed) { resetArmed = true; PMO.app.render(); return; }
         resetArmed = false; S.reset(false); ui.toast('已清空，從頭開始'); location.hash = '#/today';
       }
+      if (act === 'unsample') { const r = S.removeSample(); ui.toast(r.count ? `已移除 ${r.count} 筆範例資料` : '沒有找到範例資料'); PMO.app.render(); }
       if (act === 'sample') { S.reset(true); ui.toast('已載入範例資料'); location.hash = '#/today'; }
     };
   }
@@ -3811,8 +3889,10 @@ PMO.views.schedule = (function () {
 
   let cursor = today().slice(0, 7);   // YYYY-MM shown in the grid
   let selected = today();
-  // On Saturday and Sunday the coming week is more useful than the one that is ending.
-  let weekShift = [0, 6].includes(new Date().getDay()) ? 1 : 0;
+  // The week list moves only with its own ‹ › buttons and 「今天」, never when a day is tapped.
+  // On Saturday and Sunday it starts on the coming week, which is more useful than the one that is ending.
+  function defaultWeek() { return addDays(mondayOf(today()), [0, 6].includes(new Date().getDay()) ? 7 : 0); }
+  let weekStartSel = null;            // set on first render (mondayOf needs to exist first)
   const gCache = {};                  // 'from|to' -> events
   let gLoading = false;
   let gError = '';
@@ -3859,7 +3939,7 @@ PMO.views.schedule = (function () {
     return out.sort((a, b) => a.date.localeCompare(b.date) || (a.time || '').localeCompare(b.time || '') || order[a.kind] - order[b.kind]);
   }
 
-  function gKey() { const r = gridRange(); const w = addDays(mondayOf(selected), weekShift * 7); const s = w < r.start ? w : r.start; const e = addDays(w, 6) > r.end ? addDays(w, 6) : r.end; return s + '|' + e; }
+  function gKey() { const r = gridRange(); const w = weekStartSel || defaultWeek(); const s = w < r.start ? w : r.start; const e = addDays(w, 6) > r.end ? addDays(w, 6) : r.end; return s + '|' + e; }
 
   function loadGoogle() {
     if (!PMO.gcal.connected() || gLoading) return;
@@ -3873,7 +3953,7 @@ PMO.views.schedule = (function () {
         : err.status === 403 ? '沒有讀取這個日曆的權限，或 Google Calendar API 還沒啟用。'
         : err.message;
     })
-      .finally(() => { gLoading = false; if (location.hash.startsWith('#/schedule')) PMO.app.render(); });
+      .finally(() => { gLoading = false; if (location.hash.startsWith('#/schedule')) rerender(); });
   }
 
   function itemRow(it) {
@@ -3918,7 +3998,7 @@ PMO.views.schedule = (function () {
     const chips = pins.length ? `<div class="chips">${pins.map(r => `<button type="button" class="chip ${r === region ? 'on' : ''}" data-act="h-pick" data-r="${esc(r)}">${esc(H.nameOf(r))}</button>`).join('')}</div>` : '';
 
     let body = '';
-    if (!region) body = '<p class="empty">從選單選一個國家，就會列出那裡的假期。不會放進上面的月曆。</p>';
+    if (!region) body = '<p class="empty">從選單選一個國家，就會列出那裡的假期，月曆上也會用紅色小點標出來。</p>';
     else {
       const list = H.cached(region, year);
       const err = H.error(region, year);
@@ -3950,6 +4030,7 @@ PMO.views.schedule = (function () {
             <button type="button" class="${hScope === 'year' ? 'on' : ''}" data-act="h-scope" data-s="year">${year} 全年</button>
           </div>
           <label class="small"><input type="checkbox" id="h-off" ${hOnlyOff ? 'checked' : ''}> 只看放假日</label>
+          <label class="small"><input type="checkbox" id="h-grid" ${S.settings.holidayOnGrid !== false ? 'checked' : ''}> 在月曆上標小點</label>
         </div>` : ''}
         ${body}` : ''}
     </section>`;
@@ -3958,21 +4039,29 @@ PMO.views.schedule = (function () {
   function render() {
     const t = today();
     const { start, end } = gridRange();
-    const weekStart = addDays(mondayOf(selected), weekShift * 7);
+    if (!weekStartSel) weekStartSel = defaultWeek();
+    const weekStart = weekStartSel;
+    const thisMon = mondayOf(t);
+    const weekTitle = weekStart === thisMon ? '這一週' : weekStart === addDays(thisMon, 7) ? '下一週' : weekStart === addDays(thisMon, -7) ? '上一週' : weekStart > thisMon ? '之後的一週' : '之前的一週';
     const weekEnd = addDays(weekStart, 6);
     const all = collect(start < weekStart ? start : weekStart, end > weekEnd ? end : weekEnd);
     const byDate = {};
     all.forEach(it => { (byDate[it.date] = byDate[it.date] || []).push(it); });
 
+    const H0 = PMO.holidays;
+    const hRegion = H0.current();
+    const hGrid = hRegion && S.settings.holidayOnGrid !== false;
     const cells = [];
     for (let dt = start; dt <= end; dt = addDays(dt, 1)) {
       const items = byDate[dt] || [];
+      const hol = hGrid ? H0.on(hRegion, dt).filter(h => !hOnlyOff || h.off) : [];
+      const holOff = hol.some(h => h.off);
       const kinds = [...new Set(items.map(i => i.kind))].slice(0, 4);
       const inMonth = dt.slice(0, 7) === cursor;
-      cells.push(`<button type="button" class="cal-cell ${inMonth ? '' : 'out'} ${dt === t ? 'is-today' : ''} ${dt === selected ? 'is-sel' : ''}"
-        data-act="pick" data-d="${dt}" aria-label="${dayLabel(dt)}，${items.length} 項" aria-pressed="${dt === selected}">
+      cells.push(`<button type="button" class="cal-cell ${inMonth ? '' : 'out'} ${dt === t ? 'is-today' : ''} ${dt === selected ? 'is-sel' : ''} ${holOff ? 'is-off' : ''}"
+        data-act="pick" data-d="${dt}" aria-label="${dayLabel(dt)}${hol.length ? '，' + esc(hol.map(h => h.title).join('、')) : ''}，${items.length} 項" aria-pressed="${dt === selected}"${hol.length ? ` title="${esc(hol.map(h => h.title).join('、'))}"` : ''}>
         <span class="cal-num">${Number(dt.slice(8))}</span>
-        <span class="cal-dots">${kinds.map(k => `<i class="kind-dot k-${k}"></i>`).join('')}</span>
+        <span class="cal-dots">${hol.length ? '<i class="kind-dot k-holiday"></i>' : ''}${kinds.map(k => `<i class="kind-dot k-${k}"></i>`).join('')}</span>
         ${items.length ? `<span class="cal-count">${items.length}</span>` : ''}</button>`);
     }
 
@@ -4008,7 +4097,7 @@ PMO.views.schedule = (function () {
           ${WD.map(w => `<div class="cal-wd">${w}</div>`).join('')}
           ${cells.join('')}
         </div>
-        <div class="cal-legend">${Object.keys(KIND).map(k => `<span><i class="kind-dot k-${k}"></i>${KIND[k]}</span>`).join('')}</div>
+        <div class="cal-legend">${hGrid ? `<span><i class="kind-dot k-holiday"></i>${esc(H0.nameOf(hRegion))}假期</span>` : ''}${Object.keys(KIND).map(k => `<span><i class="kind-dot k-${k}"></i>${KIND[k]}</span>`).join('')}</div>
       </section>
 
       <section class="panel">
@@ -4018,8 +4107,9 @@ PMO.views.schedule = (function () {
       </section>
 
       <section class="panel">
-        <div class="panel-head"><h2>${weekStart <= t && t <= weekEnd ? '這一週' : weekStart > t ? (weekShift === 1 || mondayOf(t) === addDays(weekStart, -7) ? '下一週' : '之後的一週') : '之前的一週'}（${fmtDate(weekStart).slice(5)}–${fmtDate(weekEnd).slice(5)}）</h2>
+        <div class="panel-head"><h2>${weekTitle}（${fmtDate(weekStart).slice(5)}–${fmtDate(weekEnd).slice(5)}）</h2>
           <div class="actions"><span class="small muted">${weekCount} 項</span>
+            ${weekStart !== thisMon ? '<button class="btn sm ghost" data-act="wthis">本週</button>' : ''}
             <button class="btn sm ghost" data-act="wprev" aria-label="上一週">‹</button>
             <button class="btn sm ghost" data-act="wnext" aria-label="下一週">›</button></div></div>
         <div class="week">
@@ -4036,13 +4126,35 @@ PMO.views.schedule = (function () {
     return { title: '行事曆', html };
   }
 
+  /* Redraws the page while keeping one panel where it was on screen, so content you are looking at does not jump
+     when something above it changes height (the selected day's list, Google events arriving).
+     from = the tapped element (its panel stays put); without it, the first panel still on screen stays put. */
+  function rerender(from) {
+    const panels = () => [...document.querySelectorAll('#view section.panel')];
+    let idx = -1, top = 0;
+    const own = from && from.closest && from.closest('section.panel');
+    const list = panels();
+    if (own && !own.classList.contains('cal')) idx = list.indexOf(own);
+    else if (!own) idx = list.findIndex(el => el.getBoundingClientRect().bottom > 0);
+    if (idx >= 0) top = list[idx].getBoundingClientRect().top;
+    PMO.app.render();
+    const after = panels()[idx];
+    if (idx >= 0 && after) {
+      const delta = after.getBoundingClientRect().top - top;
+      if (Math.abs(delta) > 1) window.scrollBy(0, delta);
+    }
+  }
+
   function mount(root) {
     PMO.gcal.prepare().catch(() => {});
     loadGoogle();
-    PMO.holidays.ensure(PMO.holidays.current(), cursor.slice(0, 4), () => { if (location.hash.startsWith('#/schedule')) PMO.app.render(); });
+    const gr = gridRange();
+    [...new Set([gr.start.slice(0, 4), cursor.slice(0, 4), gr.end.slice(0, 4)])].forEach(y =>
+      PMO.holidays.ensure(PMO.holidays.current(), y, () => { if (location.hash.startsWith('#/schedule')) rerender(); }));
     root.onchange = e => {
       if (e.target.id === 'h-region') { PMO.holidays.setCurrent(e.target.value); hOpen = true; PMO.app.render(); }
-      if (e.target.id === 'h-off') { hOnlyOff = e.target.checked; PMO.app.render(); }
+      if (e.target.id === 'h-off') { hOnlyOff = e.target.checked; rerender(e.target); }
+      if (e.target.id === 'h-grid') { S.settings.holidayOnGrid = e.target.checked; S.saveSettings(); rerender(e.target); }
     };
     root.onclick = async e => {
       if (await P.handle(e)) return;
@@ -4050,20 +4162,21 @@ PMO.views.schedule = (function () {
       if (!a) return;
       const act = a.dataset.act;
       if (act === 'h-toggle') { hOpen = !(hOpen == null ? !!PMO.holidays.current() : hOpen); PMO.app.render(); return; }
-      if (act === 'h-pick') { PMO.holidays.setCurrent(a.dataset.r); hOpen = true; PMO.app.render(); return; }
-      if (act === 'h-pin') { PMO.holidays.togglePin(PMO.holidays.current()); PMO.app.render(); return; }
-      if (act === 'h-scope') { hScope = a.dataset.s; PMO.app.render(); return; }
+      if (act === 'h-pick') { PMO.holidays.setCurrent(a.dataset.r); hOpen = true; rerender(a); return; }
+      if (act === 'h-pin') { PMO.holidays.togglePin(PMO.holidays.current()); rerender(a); return; }
+      if (act === 'h-scope') { hScope = a.dataset.s; rerender(a); return; }
       if (act === 'h-retry') { PMO.holidays.retry(PMO.holidays.current(), cursor.slice(0, 4)); PMO.app.render(); return; }
-      if (act === 'h-day') { selected = a.dataset.d; cursor = selected.slice(0, 7); weekShift = 0; PMO.app.render(); return; }
-      if (act === 'wprev' || act === 'wnext') { weekShift += act === 'wnext' ? 1 : -1; PMO.app.render(); return; }
-      if (act === 'pick') { weekShift = 0; selected = a.dataset.d; if (selected.slice(0, 7) !== cursor) cursor = selected.slice(0, 7); PMO.app.render(); }
+      if (act === 'h-day') { selected = a.dataset.d; cursor = selected.slice(0, 7); rerender(a); return; }
+      if (act === 'wprev' || act === 'wnext') { weekStartSel = addDays(weekStartSel || defaultWeek(), act === 'wnext' ? 7 : -7); rerender(a); return; }
+      if (act === 'wthis') { weekStartSel = mondayOf(today()); rerender(a); return; }
+      if (act === 'pick') { selected = a.dataset.d; if (selected.slice(0, 7) !== cursor) cursor = selected.slice(0, 7); rerender(a); }
       if (act === 'prev' || act === 'next') {
         const d = new Date(Number(cursor.slice(0, 4)), Number(cursor.slice(5, 7)) - 1 + (act === 'next' ? 1 : -1), 1);
         cursor = ymd(d).slice(0, 7);
         selected = cursor === today().slice(0, 7) ? today() : cursor + '-01';
         PMO.app.render();
       }
-      if (act === 'today') { cursor = today().slice(0, 7); selected = today(); weekShift = [0, 6].includes(new Date().getDay()) ? 1 : 0; PMO.app.render(); }
+      if (act === 'today') { cursor = today().slice(0, 7); selected = today(); weekStartSel = defaultWeek(); PMO.app.render(); }
       if (act === 'add-task') { await PMO.edit.task(null, { due: selected }); PMO.app.render(); }
       if (act === 'reload') { Object.keys(gCache).forEach(k => delete gCache[k]); gFailedKey = ''; gError = ''; PMO.app.render(); }
       if (act === 'connect') {
