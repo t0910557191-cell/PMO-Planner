@@ -336,6 +336,15 @@ ul.plain li { margin: 4px 0; }
 .bar-track i { display: block; height: 100%; background: var(--accent); }
 @media (max-width: 480px) { .bar-row { grid-template-columns: 7.5em 1fr 1.6em; } }
 
+/* Row actions wrap below the text when the row is narrow, instead of squeezing it */
+.list li { flex-wrap: wrap; }
+.list li .grow { flex: 1 1 160px; }
+.row-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; align-items: flex-start; }
+@media (max-width: 640px) {
+  .date { min-width: 64px; }
+  .list li .grow { flex-basis: 140px; }
+}
+
 </style>
 </head>
 <body>
@@ -1130,7 +1139,7 @@ PMO.parts = (function () {
       ${dueLabel(t.due, done)}
       <span class="grow ${done ? 'done-text' : ''}">${esc(t.title)}
         <span class="row-meta">${o.hideUnit ? '' : unitTag(t.buId)}${t.importance === 'H' ? '<span class="pill H">重要</span>' : ''}${t.status === 'doing' ? '<span class="pill tag">進行中</span>' : ''}${o.showScore ? `<span class="small muted mono">分數 ${S.taskScore(t)}</span>` : ''}</span></span>
-      <button class="btn sm ghost" data-act="task-edit" data-id="${esc(t.id)}">${t.triaged === false ? '整理' : '編輯'}</button></li>`;
+      <span class="row-actions"><button class="btn sm ghost" data-act="task-edit" data-id="${esc(t.id)}">${t.triaged === false ? '整理' : '編輯'}</button></span></li>`;
   }
 
   function followRow(f, opts) {
@@ -1141,9 +1150,9 @@ PMO.parts = (function () {
       <span class="date ${due ? 'over' : ''}">${f.status === 'done' ? '已收到' : due ? '該追了' : '追 ' + fmtDate(f.nudgeOn).slice(5)}</span>
       <span class="grow ${f.status === 'done' ? 'done-text' : ''}">${esc(f.what)}
         <span class="row-meta"><span class="small muted">${esc(f.who)}${f.channel ? '・' + esc(f.channel) : ''}・已等 ${waitedDays} 天</span>${o.hideUnit ? '' : unitTag(f.buId)}</span></span>
-      ${f.status === 'waiting' ? `<button class="btn sm" data-act="fu-done" data-id="${esc(f.id)}">收到了</button>
+      <span class="row-actions">${f.status === 'waiting' ? `<button class="btn sm" data-act="fu-done" data-id="${esc(f.id)}">收到了</button>
       <button class="btn sm ghost" data-act="fu-snooze" data-id="${esc(f.id)}" title="提醒日往後延 3 天">+3 天</button>` : ''}
-      <button class="btn sm ghost" data-act="fu-edit" data-id="${esc(f.id)}">編輯</button></li>`;
+      <button class="btn sm ghost" data-act="fu-edit" data-id="${esc(f.id)}">編輯</button></span></li>`;
   }
 
   function routineRow(r, opts) {
@@ -1154,8 +1163,8 @@ PMO.parts = (function () {
     return `<li>
       <span class="date ${due ? 'over' : ''}">${due ? '該做了' : fmtDate(next).slice(5)}</span>
       <span class="grow">${esc(r.title)}<span class="row-meta"><span class="small muted">${cad}${r.lastDone ? '・上次 ' + fmtDate(r.lastDone).slice(5) : '・還沒做過'}</span>${o.hideUnit ? '' : unitTag(r.buId)}</span></span>
-      <button class="btn sm ${due ? 'primary' : ''}" data-act="rt-done" data-id="${esc(r.id)}">完成這次</button>
-      <button class="btn sm ghost" data-act="rt-edit" data-id="${esc(r.id)}">編輯</button></li>`;
+      <span class="row-actions"><button class="btn sm ${due ? 'primary' : ''}" data-act="rt-done" data-id="${esc(r.id)}">完成這次</button>
+      <button class="btn sm ghost" data-act="rt-edit" data-id="${esc(r.id)}">編輯</button></span></li>`;
   }
 
   function sparkline(i) {
