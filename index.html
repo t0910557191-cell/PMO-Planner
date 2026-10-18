@@ -1521,9 +1521,20 @@ PMO.gcal = (function () {
   const { addDays, today } = PMO.util;
   const SCOPE = 'https://www.googleapis.com/auth/calendar.events';
   const API = 'https://www.googleapis.com/calendar/v3';
+  const TOKEN_KEY = 'pmo.gtoken';
   let token = null;
   let tokenExpiry = 0;
   let gisLoading = null;
+  let client = null;
+  let clientFor = '';
+  let pending = null;
+
+  // Keep the access token for this tab only (about an hour), so a page reload does not ask again.
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(TOKEN_KEY) || 'null');
+    if (saved && saved.exp > Date.now()) { token = saved.t; tokenExpiry = saved.exp; }
+  } catch (e) { /* ignore */ }
+  function remember() { try { sessionStorage.setItem(TOKEN_KEY, JSON.stringify({ t: token, exp: tokenExpiry })); } catch (e) { /* ignore */ } }
 
   function loadGIS() {
     if (window.google && google.accounts && google.accounts.oauth2) return Promise.resolve();
@@ -1539,25 +1550,52 @@ PMO.gcal = (function () {
     return gisLoading;
   }
 
-  function connected() { return !!token && Date.now() < tokenExpiry; }
+  const ERR = {
+    popup_closed: '登入視窗被關掉了，授權沒有完成。如果視窗裡出現錯誤訊息（例如 origin_mismatch），請把畫面截下來對照設定。',
+    popup_failed_to_open: '登入視窗被瀏覽器擋住了。請允許這個網站開啟彈出式視窗後再按一次。'
+  };
 
-  async function signIn() {
+  /* Load Google's script and prepare the client ahead of time.
+     Phones only allow a popup when it opens right inside the tap, so nothing slow may run between the tap and the popup. */
+  function prepare() {
     const clientId = S.settings.googleClientId;
-    if (!clientId) throw new Error('請先到「設定」填入 Google OAuth Client ID。');
-    if (location.protocol === 'file:') throw new Error('Google 登入需要用網址開啟（GitHub Pages 或本機伺服器），不能直接雙擊檔案。');
-    await loadGIS();
-    return new Promise((resolve, reject) => {
-      const client = google.accounts.oauth2.initTokenClient({
+    if (!clientId || location.protocol === 'file:') return Promise.resolve(false);
+    return loadGIS().then(() => {
+      if (client && clientFor === clientId) return true;
+      client = google.accounts.oauth2.initTokenClient({
         client_id: clientId,
         scope: SCOPE,
         callback: resp => {
-          if (resp.error) { reject(new Error('Google 授權失敗：' + resp.error)); return; }
+          const p = pending; pending = null;
+          if (!p) return;
+          if (resp.error) { p.reject(new Error('Google 授權失敗：' + resp.error)); return; }
           token = resp.access_token;
           tokenExpiry = Date.now() + (Number(resp.expires_in || 3600) - 60) * 1000;
-          resolve();
+          remember();
+          p.resolve();
         },
-        error_callback: err => reject(new Error('Google 授權視窗關閉或被擋：' + (err && err.type ? err.type : '未知原因')))
+        error_callback: err => {
+          const p = pending; pending = null;
+          if (!p) return;
+          const type = err && err.type ? err.type : 'unknown';
+          p.reject(new Error(ERR[type] || 'Google 授權沒有完成（' + type + '）。'));
+        }
       });
+      clientFor = clientId;
+      return true;
+    });
+  }
+
+  function ready() { return !!client && clientFor === S.settings.googleClientId; }
+  function connected() { return !!token && Date.now() < tokenExpiry; }
+
+  /* Must be called directly from a tap/click handler, with no await before it. */
+  function signIn() {
+    if (!S.settings.googleClientId) return Promise.reject(new Error('請先到「設定」填入 Google OAuth Client ID。'));
+    if (location.protocol === 'file:') return Promise.reject(new Error('Google 登入需要用網址開啟（GitHub Pages 或本機伺服器），不能直接雙擊檔案。'));
+    if (!ready()) { prepare(); return Promise.reject(new Error('Google 登入元件還在載入，請過兩秒再按一次「連接 Google」。')); }
+    return new Promise((resolve, reject) => {
+      pending = { resolve, reject };
       client.requestAccessToken({ prompt: token ? '' : 'consent' });
     });
   }
@@ -1565,10 +1603,15 @@ PMO.gcal = (function () {
   function signOut() {
     if (token && window.google && google.accounts) google.accounts.oauth2.revoke(token, () => {});
     token = null; tokenExpiry = 0;
+    try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) { /* ignore */ }
   }
 
   async function call(method, path, body) {
-    if (!connected()) await signIn();
+    if (!connected()) {
+      const e = new Error('需要先按「連接 Google」授權（授權大約一小時後會過期）。');
+      e.status = 401;
+      throw e;
+    }
     const res = await fetch(API + path, {
       method,
       headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
@@ -1577,7 +1620,8 @@ PMO.gcal = (function () {
     if (res.status === 204) return null;
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
-      const err = new Error((json.error && json.error.message) || ('Google API 錯誤 ' + res.status));
+      if (res.status === 401) { token = null; tokenExpiry = 0; }
+      const err = new Error(res.status === 401 ? '授權過期了，請再按一次「連接 Google」。' : (json.error && json.error.message) || ('Google API 錯誤 ' + res.status));
       err.status = res.status;
       throw err;
     }
@@ -1667,7 +1711,7 @@ PMO.gcal = (function () {
     }));
   }
 
-  return { signIn, signOut, connected, sync, items, upcoming };
+  return { prepare, ready, signIn, signOut, connected, sync, items, upcoming };
 })();
 
 </script>
@@ -2893,6 +2937,7 @@ PMO.views.calendar = (function () {
           <label class="small"><input type="checkbox" data-inc="tasks" ${inc.tasks !== false ? 'checked' : ''}> 任務截止日</label>
           <label class="small"><input type="checkbox" data-inc="followups" ${inc.followups !== false ? 'checked' : ''}> 追回覆的日子</label>
         </div>
+        <p style="margin-top:0"><span class="light-pill ${PMO.gcal.connected() ? 'ok' : 'none'}">${PMO.gcal.connected() ? '已連接' : '尚未連接'}</span></p>
         <p style="margin-top:0">待同步：${pending.length} 項・已對應到日曆：${mapped} 項</p>
         <div class="actions">
           <button class="btn" data-act="connect" ${!hasId || isFile ? 'disabled' : ''}>${PMO.gcal.connected() ? '重新授權' : '連接 Google'}</button>
@@ -2911,6 +2956,8 @@ PMO.views.calendar = (function () {
   }
 
   function mount(root) {
+    // Load Google's sign-in script now, so tapping "連接 Google" can open the popup immediately (phones block late popups).
+    PMO.gcal.prepare().catch(err => { lastResult = err.message; });
     root.onchange = e => {
       const c = e.target.closest('[data-inc]');
       if (!c) return;
