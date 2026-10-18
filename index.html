@@ -169,7 +169,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .bu-card { display: flex; flex-direction: column; gap: 10px; text-decoration: none; color: inherit; border-left: 4px solid var(--c, var(--accent)); }
 .bu-card:hover { box-shadow: var(--shadow); }
 .bu-card .counts { display: flex; gap: 6px; flex-wrap: wrap; }
-.stat-row { display: flex; gap: 20px; flex-wrap: wrap; }
+.stat-row { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px 12px; }
+@media (max-width: 760px) { .stat-row { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.stat { min-width: 0; }
 .stat b { display: block; font-size: 1.6rem; font-family: var(--display); font-variant-numeric: tabular-nums; }
 .stat span { font-size: .82rem; color: var(--muted); }
 
@@ -207,7 +209,26 @@ input[type="text"], input[type="date"], input[type="number"], input[type="passwo
   font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line);
   border-radius: 8px; padding: 7px 10px; width: 100%; min-width: 0;
 }
-textarea { resize: vertical; min-height: 80px; }
+textarea { resize: vertical; min-height: 72px; line-height: 1.5; padding: 8px 10px; }
+/* One height for every single-line field, so selects, dates and text boxes line up */
+input[type="text"], input[type="date"], input[type="number"], input[type="password"], input[type="url"], select {
+  height: 40px; padding: 0 10px; line-height: 1.2;
+}
+input[type="date"] { -webkit-appearance: none; appearance: none; display: block; text-align: left; position: relative; }
+input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); margin: 0; opacity: .6; cursor: pointer; }
+input[type="date"]::-webkit-datetime-edit { padding-right: 24px; }
+input[type="date"]::-webkit-date-and-time-value { text-align: left; margin: 0; }
+select {
+  -webkit-appearance: none; appearance: none; padding-right: 30px; text-overflow: ellipsis;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%237b8a87' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 11px center;
+}
+/* Fields show focus with their own border instead of an outline floating around them */
+input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):focus-visible, select:focus-visible, textarea:focus-visible,
+input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):focus, select:focus, textarea:focus {
+  outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
+}
+#modal-body .field { margin-bottom: 10px; }
 input[type="color"] { width: 48px; height: 34px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); padding: 2px; }
 .hint { font-size: .8rem; color: var(--muted); }
 code, .mono { font-family: var(--mono); font-size: .85em; }
@@ -351,6 +372,7 @@ button, a, input, select, label { touch-action: manipulation; }
 @media (max-width: 640px) {
   /* iOS zooms the page when a field under 16px gets focus; that zoom is what makes the page feel like it floats */
   input[type="text"], input[type="date"], input[type="number"], input[type="password"], input[type="url"], select, textarea { font-size: 16px; }
+  input[type="text"], input[type="date"], input[type="number"], input[type="password"], input[type="url"], select { height: 44px; }
   .topbar { position: static; }
   .btn { min-height: 40px; padding: 8px 14px; }
   .btn.sm { min-height: 36px; padding: 6px 12px; font-size: .88rem; }
@@ -447,6 +469,17 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
 .k-holiday { background: var(--k-holiday); }
 .cal-cell.is-off .cal-num { color: var(--k-holiday); font-weight: 600; }
 
+/* 會議紀錄 */
+.mt-notes { min-height: 220px; }
+.clip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.mt-summary { background: var(--accent-soft); border-radius: 10px; padding: 10px 12px; margin-top: 12px; }
+.mt-summary ul { margin: 4px 0 8px; padding-left: 20px; }
+.mt-actions li { align-items: flex-start; }
+.mt-action { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.mt-action-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+@media (max-width: 640px) { .mt-action-row { grid-template-columns: 1fr 1fr; } }
+#modal-body .field-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
 </style>
 </head>
 <body>
@@ -476,6 +509,7 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
         </div>
         <div class="nav-group">
           <div class="nav-label">記錄與成長</div>
+          <a href="#/meetings" data-nav="meetings">會議紀錄</a>
           <a href="#/questions" data-nav="questions">問題清單</a>
           <a href="#/wins" data-nav="wins">成果紀錄</a>
           <a href="#/quotes" data-nav="quotes">格言</a>
@@ -696,7 +730,7 @@ PMO.store = (function () {
         impact: '讓後續儀表板只需要索取 12 份既有報表，不必另做新表。', tags: ['流程數位化', '數據分析'], english: '' }
     ];
     return {
-      schema: SCHEMA, bus, projects, tasks, followups, routines, indicators, wins, quotes: [],
+      schema: SCHEMA, bus, projects, tasks, followups, routines, indicators, wins, quotes: [], meetings: [],
       quotePrefs: { off: [], favs: [], todaySource: 'all' },
       questions: [{ id: uid('q'), buId: 'u_rd', text: '開發追蹤表，主管希望先看哪三個指標？', status: 'parked', created: t, answer: '' }],
       rituals: { days: {}, weeks: {} },
@@ -706,7 +740,7 @@ PMO.store = (function () {
 
   function emptyData() {
     return {
-      schema: SCHEMA, bus: [], projects: [], tasks: [], followups: [], routines: [], indicators: [], wins: [], questions: [], quotes: [],
+      schema: SCHEMA, bus: [], projects: [], tasks: [], followups: [], routines: [], indicators: [], wins: [], questions: [], quotes: [], meetings: [],
       quotePrefs: { off: [], favs: [], todaySource: 'all' },
       rituals: { days: {}, weeks: {} },
       meta: { created: new Date().toISOString(), updated: new Date().toISOString(), lastBackup: null, isSample: false }
@@ -751,6 +785,7 @@ PMO.store = (function () {
     out.wins = arr(out.wins).map(w => Object.assign({ buId: '', impact: '', tags: [], english: '' }, w));
     out.questions = arr(out.questions);
     out.quotes = arr(out.quotes);
+    out.meetings = arr(out.meetings).map(m => Object.assign({ title: '', date: '', buId: '', attendees: '', notes: '', decisions: '', files: [], created: '' }, m));
     out.quotePrefs = Object.assign({ off: [], favs: [], todaySource: 'all' }, out.quotePrefs || {});
     out.rituals = Object.assign({ days: {}, weeks: {} }, out.rituals || {});
     out.meta = Object.assign(base.meta, out.meta || {});
@@ -887,6 +922,7 @@ PMO.store = (function () {
     data.bus = data.bus.filter(b => b.id !== id);
     data.projects = data.projects.filter(p => p.buId !== id);
     data.questions = data.questions.filter(q => q.buId !== id);
+    data.meetings.forEach(m => { if (m.buId === id) m.buId = ''; });
     ['tasks', 'followups', 'routines', 'indicators', 'wins'].forEach(k => data[k].forEach(x => { if (x.buId === id) x.buId = ''; }));
   }
   /* Removes the built-in sample items (matched by their exact titles) and keeps everything you added yourself.
@@ -1280,10 +1316,10 @@ PMO.edit = (function () {
         { name: 'due', label: '截止日', type: 'date', value: cur.due || d.due || '', row: true },
         { name: 'importance', label: '重要性', type: 'select', value: cur.importance || 'M', row: true, options: IMPORTANCE },
         { name: 'effort', label: '花多少力氣', type: 'select', value: cur.effort || 'M', row: true, options: EFFORT },
-        { name: 'status', label: '狀態', type: 'select', value: cur.status || 'todo', row: true,
-          options: [{ value: 'todo', label: '待辦' }, { value: 'doing', label: '進行中' }, { value: 'done', label: '完成' }] },
-        { name: 'notes', label: '備註', type: 'textarea', value: cur.notes }
-      ]
+        existing ? { name: 'status', label: '狀態', type: 'select', value: cur.status || 'todo', row: true,
+          options: [{ value: 'todo', label: '待辦' }, { value: 'doing', label: '進行中' }, { value: 'done', label: '完成' }] } : null,
+        { name: 'notes', label: '備註', type: 'textarea', value: cur.notes, placeholder: '選填' }
+      ].filter(Boolean)
     });
     if (!r) return null;
     if (r !== 'delete') { r.triaged = true; if (r.status === 'done' && !cur.doneOn) r.doneOn = today(); }
@@ -1585,7 +1621,7 @@ PMO.backup = (function () {
     } else {
       const cur = S.data;
       const inc = S.normalize(parsed.data);
-      ['bus', 'projects', 'tasks', 'followups', 'routines', 'indicators', 'wins', 'questions', 'quotes']
+      ['bus', 'projects', 'tasks', 'followups', 'routines', 'indicators', 'wins', 'questions', 'quotes', 'meetings']
         .forEach(k => inc[k].forEach(x => S.upsert(cur[k], x)));
       Object.assign(cur.rituals.days, inc.rituals.days);
       Object.assign(cur.rituals.weeks, inc.rituals.weeks);
@@ -2027,6 +2063,114 @@ PMO.holidays = (function () {
 
 </script>
   <script>
+/* ---- js/services/files.js ---- */
+/* Reads attachments in the browser for the AI: nothing is uploaded anywhere except to the AI service you call.
+   - Text files (txt, md, csv, json, vtt, srt): read as text
+   - Word / PowerPoint / Excel (docx, pptx, xlsx): text pulled out of the file (they are zip archives of XML)
+   - PDF and images: passed to the AI as they are (Claude reads both; OpenAI-compatible services read images only) */
+PMO.files = (function () {
+  const TEXT_EXT = ['txt', 'md', 'csv', 'tsv', 'json', 'vtt', 'srt', 'log', 'html', 'htm'];
+  const IMG = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif' };
+  const MAX_TOTAL = 15 * 1024 * 1024;
+
+  const ext = name => (String(name).split('.').pop() || '').toLowerCase();
+  const kindOf = f => {
+    const e = ext(f.name);
+    if (TEXT_EXT.includes(e)) return 'text';
+    if (['docx', 'pptx', 'xlsx'].includes(e)) return 'office';
+    if (e === 'pdf') return 'pdf';
+    if (IMG[e]) return 'image';
+    return 'other';
+  };
+
+  function base64(buf) {
+    const bytes = new Uint8Array(buf);
+    let s = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(s);
+  }
+
+  /* Minimal zip reader: finds the central directory and inflates the entries we ask for. */
+  async function unzip(buf, wanted) {
+    const dv = new DataView(buf);
+    let eocd = -1;
+    for (let i = buf.byteLength - 22; i >= Math.max(0, buf.byteLength - 66000); i--) {
+      if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+    }
+    if (eocd < 0) throw new Error('檔案格式看不懂（不是有效的 Office 檔）');
+    const count = dv.getUint16(eocd + 10, true);
+    let p = dv.getUint32(eocd + 16, true);
+    const dec = new TextDecoder();
+    const out = {};
+    for (let n = 0; n < count; n++) {
+      if (dv.getUint32(p, true) !== 0x02014b50) break;
+      const method = dv.getUint16(p + 10, true);
+      const csize = dv.getUint32(p + 20, true);
+      const nameLen = dv.getUint16(p + 28, true), extraLen = dv.getUint16(p + 30, true), commentLen = dv.getUint16(p + 32, true);
+      const local = dv.getUint32(p + 42, true);
+      const name = dec.decode(new Uint8Array(buf, p + 46, nameLen));
+      p += 46 + nameLen + extraLen + commentLen;
+      if (!wanted(name)) continue;
+      const lNameLen = dv.getUint16(local + 26, true), lExtraLen = dv.getUint16(local + 28, true);
+      const data = new Uint8Array(buf, local + 30 + lNameLen + lExtraLen, csize);
+      if (method === 0) out[name] = dec.decode(data);
+      else if (method === 8) {
+        if (typeof DecompressionStream === 'undefined') throw new Error('這個瀏覽器太舊，讀不了 Office 檔，請更新瀏覽器或把內容貼上');
+        const stream = new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+        out[name] = await new Response(stream).text();
+      }
+    }
+    return out;
+  }
+
+  const xmlText = (xml, tag, breakTag) => {
+    let s = xml;
+    if (breakTag) s = s.replace(new RegExp('</' + breakTag + '>', 'g'), '\n');
+    const parts = [];
+    s.replace(new RegExp('<' + tag + '(?: [^>]*)?>([^<]*)</' + tag + '>|(\\n)', 'g'), (m, t, nl) => { parts.push(nl ? '\n' : t); return m; });
+    return parts.join('').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&')
+      .replace(/\n{3,}/g, '\n\n').trim();
+  };
+  const num = s => Number((s.match(/(\d+)\.xml$/) || [0, 0])[1]);
+
+  async function officeText(file) {
+    const buf = await file.arrayBuffer();
+    const e = ext(file.name);
+    if (e === 'docx') {
+      const z = await unzip(buf, n => n === 'word/document.xml');
+      return xmlText(z['word/document.xml'] || '', 'w:t', 'w:p');
+    }
+    if (e === 'pptx') {
+      const z = await unzip(buf, n => /^ppt\/slides\/slide\d+\.xml$/.test(n));
+      return Object.keys(z).sort((a, b) => num(a) - num(b))
+        .map((k, i) => '【第 ' + (i + 1) + ' 張投影片】\n' + xmlText(z[k], 'a:t', 'a:p')).join('\n\n');
+    }
+    const z = await unzip(buf, n => n === 'xl/sharedStrings.xml');
+    return xmlText(z['xl/sharedStrings.xml'] || '', 't', 'si');
+  }
+
+  /* Turns picked files into parts for the AI: { name, kind, text } or { name, kind, mime, data(base64) }. */
+  async function read(fileList) {
+    const files = [...fileList];
+    const total = files.reduce((n, f) => n + f.size, 0);
+    if (total > MAX_TOTAL) throw new Error('附件加起來超過 15 MB，請分次處理或只挑重點檔案');
+    const parts = [];
+    for (const f of files) {
+      const kind = kindOf(f);
+      if (kind === 'text') parts.push({ name: f.name, kind, text: await f.text() });
+      else if (kind === 'office') parts.push({ name: f.name, kind: 'text', text: await officeText(f) });
+      else if (kind === 'pdf') parts.push({ name: f.name, kind, mime: 'application/pdf', data: base64(await f.arrayBuffer()) });
+      else if (kind === 'image') parts.push({ name: f.name, kind, mime: IMG[ext(f.name)], data: base64(await f.arrayBuffer()) });
+      else throw new Error('「' + f.name + '」這種檔案讀不了。可以用 Word、PowerPoint、Excel、PDF、圖片或文字檔。');
+    }
+    return parts;
+  }
+
+  return { read, kindOf, officeText, accept: '.txt,.md,.csv,.tsv,.json,.vtt,.srt,.docx,.pptx,.xlsx,.pdf,.png,.jpg,.jpeg,.webp,.gif' };
+})();
+
+</script>
+  <script>
 /* ---- js/services/ai.js ---- */
 /* AI consultation. Two provider types:
    - claude: Anthropic Messages API, called from the browser with your own key
@@ -2098,7 +2242,7 @@ PMO.ai = (function () {
     return system;
   }
 
-  async function askClaude(messages, system) {
+  async function askClaude(messages, system, maxTokens) {
     const s = S.settings;
     if (!s.claudeKey) throw new Error('請先到「設定」填入 Claude API key。');
     const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -2109,20 +2253,20 @@ PMO.ai = (function () {
         'anthropic-version': '2023-06-01',
         'anthropic-dangerous-direct-browser-access': 'true'
       },
-      body: JSON.stringify({ model: s.claudeModel || 'claude-sonnet-5-5', max_tokens: 1500, system, messages })
+      body: JSON.stringify({ model: s.claudeModel || 'claude-sonnet-5-5', max_tokens: maxTokens || 1500, system, messages })
     });
     const json = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error('Claude API 錯誤：' + ((json.error && json.error.message) || 'HTTP ' + res.status));
     return (json.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n').trim();
   }
 
-  async function askOpenAI(messages, system) {
+  async function askOpenAI(messages, system, maxTokens) {
     const s = S.settings;
     if (!s.openaiUrl) throw new Error('請先到「設定」填入 AI 服務的端點網址。');
     const headers = { 'Content-Type': 'application/json' };
     if (s.openaiAuth === 'bearer') headers.Authorization = 'Bearer ' + s.openaiKey;
     if (s.openaiAuth === 'api-key') headers['api-key'] = s.openaiKey;
-    const body = { messages: [{ role: 'system', content: system }].concat(messages), max_tokens: 1500 };
+    const body = { messages: [{ role: 'system', content: system }].concat(messages), max_tokens: maxTokens || 1500 };
     if (s.openaiModel) body.model = s.openaiModel;
     let res;
     try {
@@ -2144,7 +2288,60 @@ PMO.ai = (function () {
     return S.settings.aiProvider === 'claude' ? askClaude(msgs, system) : askOpenAI(msgs, system);
   }
 
-  return { ask, snapshot, PRESETS, providerLabel, ready };
+  /* Meeting notes (and attachments) → summary, decisions and action items, as JSON. */
+  async function extractActions({ title, date, unitName, attendees, notes, parts }) {
+    const s = S.settings;
+    const claude = s.aiProvider === 'claude';
+    const units = S.activeBus().map(b => b.name);
+    const instructions = [
+      '請從下面的會議紀錄和附件，整理出摘要、決議和待辦事項。',
+      '今天是 ' + today() + '。會議日期：' + (date || today()) + '。日期請換算成 YYYY-MM-DD；沒提到日期就留空字串。',
+      '使用者是「我」。她自己要做的事，kind 填 "task"；要等別人回覆或交付的，kind 填 "follow"，owner 填那個人或單位。',
+      '單位只能從這些名稱選，或留空：' + (units.length ? units.join('、') : '（沒有）') + '。',
+      'importance 用 H、M、L。標題用一句話、動詞開頭，具體到看了就知道要做什麼。不要編造紀錄裡沒有的事。',
+      '只回覆一個 JSON 物件，不要其他文字，格式：',
+      '{"summary":"三到五句摘要","decisions":["決議…"],"actions":[{"title":"…","kind":"task","owner":"我","due":"","importance":"M","unit":"","why":"出處或原因，一句話"}]}'
+    ].join('\n');
+    const meta = '會議：' + (title || '（未命名）') + (unitName ? '｜單位：' + unitName : '') + (attendees ? '｜與會者：' + attendees : '');
+    const textParts = (parts || []).filter(x => x.kind === 'text');
+    const binParts = (parts || []).filter(x => x.kind !== 'text');
+    if (!claude && binParts.some(x => x.kind === 'pdf')) throw new Error('目前選的 AI 服務不能直接讀 PDF。請改用 Claude，或把 PDF 內容複製貼到紀錄裡。');
+    let text = meta + '\n\n【紀錄】\n' + (notes || '（沒有文字紀錄）');
+    textParts.forEach(x => { text += '\n\n【附件：' + x.name + '】\n' + String(x.text).slice(0, 60000); });
+    let content;
+    if (claude) {
+      content = binParts.map(x => x.kind === 'pdf'
+        ? { type: 'document', source: { type: 'base64', media_type: x.mime, data: x.data }, title: x.name }
+        : { type: 'image', source: { type: 'base64', media_type: x.mime, data: x.data } });
+      content.push({ type: 'text', text: instructions + '\n\n' + text });
+    } else {
+      content = [{ type: 'text', text: instructions + '\n\n' + text }]
+        .concat(binParts.map(x => ({ type: 'image_url', image_url: { url: 'data:' + x.mime + ';base64,' + x.data } })));
+    }
+    const system = '你是細心的會議記錄整理助理，只根據提供的內容整理，使用繁體中文。';
+    const raw = claude ? await askClaude([{ role: 'user', content }], system, 3000) : await askOpenAI([{ role: 'user', content }], system, 3000);
+    return parseJSON(raw);
+  }
+
+  function parseJSON(raw) {
+    let t = String(raw || '').replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
+    const a = t.indexOf('{'), b = t.lastIndexOf('}');
+    if (a < 0 || b < a) throw new Error('AI 沒有照格式回覆，請再試一次。');
+    let obj;
+    try { obj = JSON.parse(t.slice(a, b + 1)); } catch (e) { throw new Error('AI 回覆的格式有誤，請再試一次。'); }
+    const okDate = d => /^\d{4}-\d{2}-\d{2}$/.test(d || '') ? d : '';
+    return {
+      summary: String(obj.summary || ''),
+      decisions: (Array.isArray(obj.decisions) ? obj.decisions : []).map(String).filter(Boolean),
+      actions: (Array.isArray(obj.actions) ? obj.actions : []).filter(x => x && x.title).map(x => ({
+        title: String(x.title).trim(), kind: x.kind === 'follow' ? 'follow' : 'task', owner: String(x.owner || ''),
+        due: okDate(x.due), importance: ['H', 'M', 'L'].includes(x.importance) ? x.importance : 'M',
+        unit: String(x.unit || ''), why: String(x.why || '')
+      }))
+    };
+  }
+
+  return { ask, snapshot, PRESETS, providerLabel, ready, extractActions };
 })();
 
 </script>
@@ -2999,6 +3196,340 @@ PMO.views.questions = (function () {
         const ok = await PMO.util.copy(text);
         ui.toast(ok ? '已複製待問清單' : '複製失敗');
       }
+    };
+  }
+
+  return { render, mount };
+})();
+
+</script>
+  <script>
+/* ---- js/views/meetings.js ---- */
+/* 會議紀錄: notes per meeting, attachments read in the browser, and turning the notes into tasks and follow-ups.
+   Notes save as you type. Attachments are not stored; they are only read when you ask the AI to summarize. */
+PMO.views = PMO.views || {};
+
+PMO.meetingsLib = (function () {
+  const S = PMO.store;
+  const { uid, today, addDays } = PMO.util;
+
+  function get(id) { return S.data.meetings.find(m => m.id === id); }
+  function isEmpty(m) { return !m.title && !m.notes && !m.decisions && !linked(m.id).length; }
+  function linked(id) {
+    return S.data.tasks.filter(t => t.meetingId === id).map(t => ({ kind: 'task', ref: t }))
+      .concat(S.data.followups.filter(f => f.meetingId === id).map(f => ({ kind: 'follow', ref: f })));
+  }
+  function create(defaults) {
+    const m = Object.assign({ id: uid('mt'), title: '', date: today(), buId: '', attendees: '', notes: '', decisions: '', files: [], created: today() }, defaults || {});
+    S.data.meetings.push(m); S.save();
+    return m;
+  }
+  function purgeEmpty() {
+    const before = S.data.meetings.length;
+    S.data.meetings = S.data.meetings.filter(m => !isEmpty(m));
+    if (S.data.meetings.length !== before) S.save();
+  }
+
+  /* No-AI fallback: picks lines that look like to-dos.
+     Recognized: "- [ ] …", "□ …", "TODO …", "待辦：…", "Action: …", "AI: …", and any list under a heading such as 待辦／行動項目／Action items. */
+  const MARK = /^\s*(?:[-*•‧·]\s*)?(?:\[\s?\]|□|☐|TODO[:：\s]|待辦[:：]|行動[:：]|追蹤[:：]|Action(?: item)?[:：]|AI[:：])\s*/i;
+  const HEAD = /^\s*(?:#+\s*)?(?:【)?(?:待辦(?:事項)?|行動項目|後續追蹤|下一步|Action items?|Next steps?|TODO)(?:】)?\s*[:：]?\s*$/i;
+  function parseActions(text, meetingDate) {
+    const lines = String(text || '').split(/\r?\n/);
+    const out = [];
+    let inList = false;
+    lines.forEach(line => {
+      if (HEAD.test(line)) { inList = true; return; }
+      if (!line.trim()) { inList = false; return; }
+      let t = '';
+      if (MARK.test(line)) t = line.replace(MARK, '');
+      else if (inList && /^\s*(?:[-*•‧·]|\d+[.、)）])\s*/.test(line)) t = line.replace(/^\s*(?:[-*•‧·]|\d+[.、)）])\s*/, '');
+      if (!t.trim()) return;
+      out.push(guess(t.trim(), meetingDate));
+    });
+    return out;
+  }
+  function guess(t, meetingDate) {
+    const base = meetingDate || today();
+    let due = '';
+    const iso = t.match(/(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})/);
+    const md = t.match(/(?:^|[^\d/])(\d{1,2})[/月](\d{1,2})日?(?!\d)/);
+    const pad = n => String(n).padStart(2, '0');
+    if (iso) due = iso[1] + '-' + pad(iso[2]) + '-' + pad(iso[3]);
+    else if (md) {
+      let y = Number(base.slice(0, 4));
+      const cand = y + '-' + pad(md[1]) + '-' + pad(md[2]);
+      due = cand < addDays(base, -60) ? (y + 1) + '-' + pad(md[1]) + '-' + pad(md[2]) : cand;
+    }
+    const who = t.match(/[（(]\s*([^（）()]{1,12})\s*[)）]\s*$/) || t.match(/@(\S{1,12})/);
+    const owner = who ? who[1] : '我';
+    const mine = /^(我|me|自己)$/i.test(owner);
+    const title = who ? t.replace(who[0], '').trim() || t : t;
+    return { title, kind: mine ? 'task' : 'follow', owner: mine ? '我' : owner, due, importance: 'M', unit: '', why: '' };
+  }
+
+  return { get, isEmpty, linked, create, purgeEmpty, parseActions };
+})();
+
+PMO.views.meetings = (function () {
+  const S = PMO.store;
+  const L = PMO.meetingsLib;
+  const { esc, fmtDate } = PMO.util;
+  let query = '';
+
+  function render() {
+    L.purgeEmpty();
+    const q = query.trim().toLowerCase();
+    const list = S.data.meetings.slice()
+      .filter(m => !q || [m.title, m.notes, m.decisions, m.attendees].join(' ').toLowerCase().includes(q))
+      .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    const row = m => {
+      const items = L.linked(m.id);
+      const open = items.filter(x => x.kind === 'task' ? x.ref.status !== 'done' : x.ref.status === 'waiting').length;
+      return `<li><span class="date">${fmtDate(m.date).slice(5)}</span>
+        <span class="grow"><a href="#/meeting/${esc(m.id)}">${esc(m.title || '（未命名會議）')}</a>
+          <span class="row-meta">${PMO.parts.unitTag(m.buId)}${items.length ? `<span class="small muted">待辦 ${open} / ${items.length}</span>` : ''}
+          ${m.notes ? `<span class="small muted clip">${esc(m.notes.replace(/\s+/g, ' ').slice(0, 40))}</span>` : ''}</span></span></li>`;
+    };
+    return {
+      title: '會議紀錄',
+      html: `<div class="page-head"><div><h1>會議紀錄</h1><p>記下會議重點和決議，再一鍵整理成任務與等待回覆。也可以附上簡報或紀錄檔讓 AI 幫你整理。</p></div>
+        <div class="actions"><a class="btn primary" href="#/meeting/new">＋ 新增會議紀錄</a></div></div>
+        <section class="panel">
+          ${S.data.meetings.length ? `<div class="toolbar" style="margin-bottom:8px"><input type="text" id="mt-q" placeholder="搜尋標題、內容、與會者" value="${esc(query)}" aria-label="搜尋會議"></div>` : ''}
+          ${list.length ? `<ul class="list">${list.map(row).join('')}</ul>` : `<p class="empty">${q ? '找不到符合的會議。' : '還沒有會議紀錄。'}</p>`}
+        </section>`
+    };
+  }
+
+  function mount(root) {
+    const qEl = root.querySelector('#mt-q');
+    if (qEl) qEl.oninput = () => {
+      query = qEl.value;
+      const pos = qEl.selectionStart;
+      PMO.app.render();
+      const again = document.getElementById('mt-q');
+      if (again) { again.focus({ preventScroll: true }); again.setSelectionRange(pos, pos); }
+    };
+  }
+
+  return { render, mount };
+})();
+
+PMO.views.meeting = (function () {
+  const S = PMO.store;
+  const L = PMO.meetingsLib;
+  const P = PMO.parts;
+  const { esc, uid, today, addDays } = PMO.util;
+  const ui = PMO.ui;
+  const files = {};       // meeting id -> File[] picked on this visit (never saved)
+  const results = {};     // meeting id -> { summary, decisions, actions, source }
+  let busy = false;
+  let saveTimer = null;
+  let delArmed = false;
+
+  function unitByName(name) {
+    const n = String(name || '').trim();
+    if (!n) return '';
+    const b = S.activeBus().find(x => x.name === n) || S.activeBus().find(x => n.includes(x.name) || x.name.includes(n));
+    return b ? b.id : '';
+  }
+
+  function render(params) {
+    let m = L.get(params.id);
+    if (params.id === 'new') {
+      m = L.create();
+      history.replaceState(null, '', '#/meeting/' + m.id);
+    }
+    if (!m) return { title: '會議紀錄', html: '<div class="notice">找不到這場會議，可能已經刪除了。 <a href="#/meetings">回會議紀錄</a></div>' };
+
+    const picked = files[m.id] || [];
+    const res = results[m.id];
+    const items = L.linked(m.id);
+    const aiOk = PMO.ai.ready();
+    const units = S.unitOptions(true);
+    const unitSel = (name, val) => `<select data-p="${name}" aria-label="單位">${units.map(o => `<option value="${esc(o.value)}" ${o.value === val ? 'selected' : ''}>${esc(o.label)}</option>`).join('')}</select>`;
+
+    const resultHtml = !res ? '' : `
+      ${res.summary || res.decisions.length ? `<div class="mt-summary">
+        ${res.summary ? `<p style="margin:0 0 6px"><b>摘要</b>　${esc(res.summary)}</p>` : ''}
+        ${res.decisions.length ? `<p style="margin:0"><b>決議</b></p><ul>${res.decisions.map(d => `<li>${esc(d)}</li>`).join('')}</ul>` : ''}
+        <button class="btn sm" data-act="use-summary">放進「決議與重點」</button></div>` : ''}
+      ${res.actions.length ? `<p class="small muted" style="margin:10px 0 4px">勾選要加入的項目，標題、日期和類型都可以先改。</p>
+        <ul class="list mt-actions">${res.actions.map((a, i) => `<li>
+          <input type="checkbox" class="check" data-a="${i}" data-p="pick" ${a.pick !== false ? 'checked' : ''} aria-label="加入這一項">
+          <div class="grow mt-action">
+            <input type="text" data-a="${i}" data-p="title" value="${esc(a.title)}" aria-label="標題">
+            <div class="mt-action-row">
+              <select data-a="${i}" data-p="kind" aria-label="類型"><option value="task" ${a.kind === 'task' ? 'selected' : ''}>我的任務</option><option value="follow" ${a.kind === 'follow' ? 'selected' : ''}>等別人回覆</option></select>
+              <input type="date" data-a="${i}" data-p="due" value="${esc(a.due)}" aria-label="日期">
+              ${unitSel('unit', a.buId != null ? a.buId : (unitByName(a.unit) || m.buId)).replace('data-p="unit"', `data-a="${i}" data-p="buId"`)}
+              ${a.kind === 'follow' ? `<input type="text" data-a="${i}" data-p="owner" value="${esc(a.owner === '我' ? '' : a.owner)}" placeholder="跟誰要" aria-label="跟誰要">` : `<select data-a="${i}" data-p="importance" aria-label="重要性">${[['H', '重要性高'], ['M', '重要性中'], ['L', '重要性低']].map(([v, l]) => `<option value="${v}" ${a.importance === v ? 'selected' : ''}>${l}</option>`).join('')}</select>`}
+            </div>
+            ${a.why ? `<span class="small muted">${esc(a.why)}</span>` : ''}
+          </div></li>`).join('')}</ul>
+        <div class="actions" style="margin-top:10px"><button class="btn primary" data-act="add-picked">加入勾選的項目</button><button class="btn ghost" data-act="clear-result">清掉這次的結果</button></div>`
+      : `<p class="empty">${res.source === 'ai' ? 'AI 沒有從內容裡找到待辦事項。' : '紀錄裡沒有找到待辦格式的句子。可以在待辦前面加「- [ ]」、「□」或「待辦：」，或用 AI 整理。'}</p>`}`;
+
+    const html = `
+      <div class="page-head"><div><p style="margin:0"><a href="#/meetings">← 會議紀錄</a></p><h1>${esc(m.title || '新的會議紀錄')}</h1></div>
+        <div class="actions"><span class="small muted" id="mt-saved">內容會自動儲存</span></div></div>
+
+      <section class="panel">
+        <div class="field"><label for="mt-title">會議名稱</label><input type="text" id="mt-title" data-f="title" value="${esc(m.title)}" placeholder="例如：財務月會"></div>
+        <div class="field-row">
+          <div class="field"><label for="mt-date">日期</label><input type="date" id="mt-date" data-f="date" value="${esc(m.date)}"></div>
+          <div class="field"><label for="mt-bu">單位</label><select id="mt-bu" data-f="buId">${units.map(o => `<option value="${esc(o.value)}" ${o.value === m.buId ? 'selected' : ''}>${esc(o.label)}</option>`).join('')}</select></div>
+        </div>
+        <div class="field"><label for="mt-att">與會者</label><input type="text" id="mt-att" data-f="attendees" value="${esc(m.attendees)}" placeholder="例如：財務經理、會計課長"></div>
+        <div class="field"><label for="mt-notes">紀錄</label><textarea id="mt-notes" data-f="notes" class="mt-notes" placeholder="邊開會邊記重點。待辦可以這樣寫，之後能自動抓出來：&#10;- [ ] 寄資料需求清單 10/25&#10;待辦：確認月報欄位（財務經理）">${esc(m.notes)}</textarea></div>
+        <div class="field"><label for="mt-dec">決議與重點</label><textarea id="mt-dec" data-f="decisions" placeholder="會議做了哪些決定、主管強調什麼">${esc(m.decisions)}</textarea></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>附件</h2></div>
+        <label class="btn" for="mt-file">選擇檔案</label>
+        <input type="file" id="mt-file" multiple accept="${PMO.files.accept}" class="sr-only">
+        ${picked.length ? `<ul class="list" style="margin-top:8px">${picked.map((f, i) => `<li><span class="grow">${esc(f.name)}<span class="row-meta"><span class="small muted">${Math.max(1, Math.round(f.size / 1024))} KB</span></span></span>
+            <span class="row-actions">${['text', 'office'].includes(PMO.files.kindOf(f)) ? `<button class="btn sm ghost" data-act="file-to-notes" data-i="${i}">文字貼進紀錄</button>` : ''}<button class="btn sm ghost" data-act="file-remove" data-i="${i}">移除</button></span></li>`).join('')}</ul>` : ''}
+        <p class="hint">可以放 Word、PowerPoint、Excel、PDF、圖片（白板或簡報截圖）、文字檔。附件不會存在工作台裡，只在按「用 AI 整理」時送給 AI；想留下內容，可以按「文字貼進紀錄」。${m.files.length ? '之前用過：' + esc(m.files.join('、')) : ''}</p>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>整理出待辦</h2></div>
+        <div class="actions">
+          <button class="btn primary" data-act="ai" ${busy ? 'disabled' : ''}>${busy ? 'AI 整理中…' : '用 AI 整理'}</button>
+          <button class="btn" data-act="parse">從紀錄抓待辦（不用 AI）</button>
+        </div>
+        <p class="hint">${aiOk ? `會把紀錄和附件送到「${esc(PMO.ai.providerLabel())}」。` : 'AI 還沒設定，到「設定」填入 API key 就能用；不用 AI 也可以先「從紀錄抓待辦」。'}公司機密資料請先確認公司規定，例如是否只能用公司核准的 AI 端點。</p>
+        ${resultHtml}
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>從這場會議建立的（${items.length}）</h2></div>
+        ${items.length ? `<ul class="list">${items.map(x => x.kind === 'task' ? P.taskRow(x.ref) : P.followRow(x.ref)).join('')}</ul>` : '<p class="empty">還沒有。</p>'}
+      </section>
+
+      <div class="actions" style="justify-content:flex-end">
+        <button class="btn ghost danger" data-act="delete">${delArmed ? '再按一次：刪除這場會議' : '刪除這場會議'}</button>
+      </div>`;
+    return { title: m.title || '會議紀錄', html };
+  }
+
+  function addPicked(m) {
+    const res = results[m.id];
+    let n = 0;
+    res.actions.forEach(a => {
+      if (a.pick === false || !String(a.title).trim()) return;
+      const buId = a.buId != null ? a.buId : (unitByName(a.unit) || m.buId || '');
+      const from = '來自會議：' + (m.title || '未命名') + '（' + m.date + '）';
+      if (a.kind === 'follow') {
+        S.data.followups.push({ id: uid('f'), what: a.title.trim(), who: (a.owner && a.owner !== '我') ? a.owner : '（待補）', buId, channel: '會議',
+          askedOn: m.date || today(), nudgeOn: a.due || addDays(today(), 3), status: 'waiting', notes: from, meetingId: m.id });
+      } else {
+        S.data.tasks.push({ id: uid('t'), title: a.title.trim(), buId, due: a.due || '', importance: a.importance || 'M', effort: 'M',
+          status: 'todo', triaged: true, notes: from, created: today(), meetingId: m.id });
+      }
+      n++;
+    });
+    if (!n) { ui.toast('沒有勾選任何項目'); return; }
+    delete results[m.id];
+    S.save();
+    ui.toast('已加入 ' + n + ' 項');
+  }
+
+  function mount(root, params) {
+    const m = L.get(params.id) || L.get((location.hash.split('/')[2] || ''));
+    if (!m) return;
+    delArmed = delArmed && root.dataset.mt === m.id;
+    root.dataset.mt = m.id;
+    const savedEl = () => document.getElementById('mt-saved');
+
+    // Notes save as you type (short pause first), without redrawing the page.
+    root.oninput = e => {
+      const f = e.target.dataset.f;
+      if (f) {
+        m[f] = e.target.value;
+        clearTimeout(saveTimer);
+        if (savedEl()) savedEl().textContent = '…';
+        saveTimer = setTimeout(() => { S.save(); if (savedEl()) savedEl().textContent = '已儲存'; if (f === 'title') document.getElementById('topbar-title').textContent = m.title || '會議紀錄'; }, 500);
+        return;
+      }
+      const i = e.target.dataset.a;
+      if (i != null && results[m.id]) results[m.id].actions[i][e.target.dataset.p] = e.target.value;
+    };
+    root.onchange = e => {
+      const f = e.target.dataset.f;
+      if (f && e.target.tagName === 'SELECT') { m[f] = e.target.value; S.save(); return; }
+      const i = e.target.dataset.a;
+      if (i != null && results[m.id]) {
+        const a = results[m.id].actions[i];
+        const p = e.target.dataset.p;
+        a[p] = p === 'pick' ? e.target.checked : e.target.value;
+        if (p === 'kind') PMO.app.render();
+        return;
+      }
+      if (e.target.id === 'mt-file') {
+        files[m.id] = (files[m.id] || []).concat([...e.target.files]);
+        PMO.app.render();
+      }
+    };
+
+    root.onclick = async e => {
+      if (await P.handle(e)) return;
+      const a = e.target.closest('[data-act]');
+      if (!a || a.disabled) return;
+      const act = a.dataset.act;
+      if (act !== 'delete') delArmed = false;
+      if (act === 'delete') {
+        if (!delArmed) { delArmed = true; PMO.app.render(); return; }
+        delArmed = false;
+        S.data.meetings = S.data.meetings.filter(x => x.id !== m.id);
+        S.data.tasks.forEach(t => { if (t.meetingId === m.id) delete t.meetingId; });
+        S.data.followups.forEach(f => { if (f.meetingId === m.id) delete f.meetingId; });
+        S.save(); ui.toast('已刪除會議紀錄（建立的任務保留）'); location.hash = '#/meetings';
+        return;
+      }
+      if (act === 'file-remove') { files[m.id].splice(Number(a.dataset.i), 1); PMO.app.render(); return; }
+      if (act === 'file-to-notes') {
+        const f = files[m.id][Number(a.dataset.i)];
+        try {
+          const text = PMO.files.kindOf(f) === 'office' ? await PMO.files.officeText(f) : await f.text();
+          m.notes = (m.notes ? m.notes.replace(/\s+$/, '') + '\n\n' : '') + '【' + f.name + '】\n' + text.trim();
+          S.save(); ui.toast('已把「' + f.name + '」的文字貼進紀錄'); PMO.app.render();
+        } catch (err) { ui.toast(err.message); }
+        return;
+      }
+      if (act === 'parse') {
+        clearTimeout(saveTimer); S.save();
+        results[m.id] = { summary: '', decisions: [], actions: L.parseActions(m.notes + '\n\n' + m.decisions, m.date), source: 'parse' };
+        PMO.app.render(); return;
+      }
+      if (act === 'ai') {
+        if (!PMO.ai.ready()) { ui.toast('請先到「設定」填入 AI 的 API key'); return; }
+        const picked = files[m.id] || [];
+        if (!m.notes.trim() && !picked.length) { ui.toast('先寫一點紀錄或附上檔案'); return; }
+        clearTimeout(saveTimer); S.save();
+        busy = true; PMO.app.render();
+        try {
+          const parts = await PMO.files.read(picked);
+          const r = await PMO.ai.extractActions({ title: m.title, date: m.date, unitName: m.buId ? S.buName(m.buId) : '', attendees: m.attendees, notes: m.notes + (m.decisions ? '\n\n【決議與重點】\n' + m.decisions : ''), parts });
+          results[m.id] = Object.assign(r, { source: 'ai' });
+          if (picked.length) { m.files = [...new Set(m.files.concat(picked.map(f => f.name)))]; S.save(); }
+        } catch (err) { ui.toast(err.message); }
+        busy = false;
+        if (location.hash === '#/meeting/' + m.id) PMO.app.render();
+        return;
+      }
+      if (act === 'use-summary') {
+        const r = results[m.id];
+        const add = [r.summary, r.decisions.map(d => '・' + d).join('\n')].filter(Boolean).join('\n');
+        m.decisions = (m.decisions ? m.decisions.replace(/\s+$/, '') + '\n\n' : '') + add;
+        r.summary = ''; r.decisions = [];
+        S.save(); PMO.app.render(); return;
+      }
+      if (act === 'add-picked') { addPicked(m); PMO.app.render(); return; }
+      if (act === 'clear-result') { delete results[m.id]; PMO.app.render(); }
     };
   }
 
@@ -4206,6 +4737,7 @@ PMO.app = (function () {
     const name = parts[0];
     if (name === 'bu') return { view: 'bu', params: { id: decodeURIComponent(parts[1] || '') } };
     if (name === 'project') return { view: 'project', params: { id: decodeURIComponent(parts[1] || '') } };
+    if (name === 'meeting') return { view: 'meeting', params: { id: decodeURIComponent(parts[1] || '') } };
     return { view: PMO.views[name] ? name : 'today', params: {} };
   }
 
@@ -4215,6 +4747,7 @@ PMO.app = (function () {
     let activeBu = null;
     if (route.view === 'bu') activeBu = route.params.id;
     if (route.view === 'project') { const p = S.project(route.params.id); activeBu = p && p.buId; }
+    if (route.view === 'meeting') route = Object.assign({}, route, { view: 'meetings' });
     nav.querySelectorAll('a').forEach(a => {
       const on = (a.dataset.nav && a.dataset.nav === route.view) || (a.dataset.bu && a.dataset.bu === activeBu);
       a.classList.toggle('active', !!on);
