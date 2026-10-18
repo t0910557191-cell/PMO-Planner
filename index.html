@@ -489,6 +489,11 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
 .btn { white-space: nowrap; }
 .chat-input .btn { flex: none; }
 .panel-head > .actions { margin-left: auto; align-items: center; }
+.model-list .chips { max-height: 180px; overflow-y: auto; }
+.model-list { margin-bottom: 8px; }
+.steps { padding-left: 20px; margin: 0; } .steps li { margin-bottom: 10px; line-height: 1.6; }
+.tight { padding-left: 20px; margin: 0; } .tight li { margin-bottom: 6px; line-height: 1.6; }
+#backup-hint .muted { color: var(--muted); }
 
 </style>
 </head>
@@ -530,10 +535,11 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
           <a href="#/ai" data-nav="ai">AI 諮詢</a>
           <a href="#/calendar" data-nav="calendar">Google 日曆</a>
           <a href="#/connectors" data-nav="connectors">API 連接</a>
+          <a href="#/sync" data-nav="sync">手機與電腦同步</a>
           <a href="#/backup" data-nav="backup">備份與匯出</a>
           <a href="#/settings" data-nav="settings">設定</a>
         </div>
-        <p class="nav-version">版本 10/19・會議紀錄</p>
+        <p class="nav-version">版本 10/19・同步</p>
       </nav>
     </aside>
 
@@ -809,10 +815,43 @@ PMO.store = (function () {
   const storedSettings = readJSON(SETTINGS_KEY) || {};
   let settings = Object.assign({}, defaultSettings, storedSettings);
   settings.gcalInclude = Object.assign({}, defaultSettings.gcalInclude, storedSettings.gcalInclude || {});
+  /* Change stamps for syncing between devices: every item (and each ritual day, and quote preferences) gets the time it last
+     changed in meta.stamps, and removed items leave a mark in meta.deleted, so two devices can be merged item by item. */
+  const COLLECTIONS = ['bus', 'projects', 'tasks', 'followups', 'routines', 'indicators', 'wins', 'questions', 'quotes', 'meetings'];
+  function keysOf(d) {
+    const m = {};
+    COLLECTIONS.forEach(k => (d[k] || []).forEach(x => { m[k + ':' + x.id] = JSON.stringify(x); }));
+    Object.keys(d.rituals.days || {}).forEach(k => { m['rd:' + k] = JSON.stringify(d.rituals.days[k]); });
+    Object.keys(d.rituals.weeks || {}).forEach(k => { m['rw:' + k] = JSON.stringify(d.rituals.weeks[k]); });
+    m.quotePrefs = JSON.stringify(d.quotePrefs);
+    return m;
+  }
+  let snap = {};
+  function initStamps() {
+    data.meta.stamps = data.meta.stamps || {};
+    data.meta.deleted = data.meta.deleted || {};
+    snap = keysOf(data);
+    const base = data.meta.updated || data.meta.created || new Date(0).toISOString();
+    Object.keys(snap).forEach(k => { if (!data.meta.stamps[k]) data.meta.stamps[k] = base; });
+  }
+  function stamp() {
+    const now = new Date().toISOString();
+    const cur = keysOf(data);
+    const st = data.meta.stamps || (data.meta.stamps = {});
+    const del = data.meta.deleted || (data.meta.deleted = {});
+    Object.keys(cur).forEach(k => { if (snap[k] !== cur[k]) { st[k] = now; delete del[k]; } });
+    Object.keys(snap).forEach(k => { if (!(k in cur)) { del[k] = now; delete st[k]; } });
+    // Forget removal marks after 120 days
+    const cutoff = new Date(Date.now() - 120 * 864e5).toISOString();
+    Object.keys(del).forEach(k => { if (del[k] < cutoff) delete del[k]; });
+    snap = cur;
+  }
+  initStamps();
   let saveOk = writeJSON(DATA_KEY, data);
   let sampleCleanup = null;           // what the one-time cleanup removed, shown once on 今天
 
   function save() {
+    stamp();
     data.meta.updated = new Date().toISOString();
     saveOk = writeJSON(DATA_KEY, data);
     listeners.forEach(fn => fn());
@@ -978,7 +1017,15 @@ PMO.store = (function () {
     return { count, calendar: queued.length };
   }
 
-  function replaceAll(newData) { data = normalize(newData); save(); }
+  function replaceAll(newData) { const old = data; data = normalize(newData); data.meta.stamps = {}; snap = keysOf(old); save(); }
+  /* Takes data merged from another device as is (its stamps already say when each item changed). */
+  function adopt(merged, opts) {
+    data = normalize(merged);
+    initStamps();
+    if (opts && opts.lastSync) data.meta.lastSync = opts.lastSync;
+    saveOk = writeJSON(DATA_KEY, data);
+    listeners.forEach(fn => fn({ fromSync: true }));
+  }
   function reset(withSample) { data = withSample ? sample() : emptyData(); save(); }
 
   const api = {
@@ -991,7 +1038,7 @@ PMO.store = (function () {
     save, saveSettings, onChange,
     bu, activeBus, buName, unitOptions, project, projectsOf, allMilestones, progress,
     quadrant, taskScore, taskUrgent, routineNext, indicatorLatest, indicatorLight, indicatorTrend,
-    upsert, removeBu, replaceAll, reset, normalize, removeSample
+    upsert, removeBu, replaceAll, reset, normalize, removeSample, adopt, COLLECTIONS,
   };
   if (!data.meta.sampleCleaned) { sampleCleanup = removeSample(); }
   return api;
@@ -1732,11 +1779,15 @@ PMO.backup = (function () {
 PMO.gcal = (function () {
   const S = PMO.store;
   const { addDays, today } = PMO.util;
-  const SCOPE = 'https://www.googleapis.com/auth/calendar.events';
+  const CAL_SCOPE = 'https://www.googleapis.com/auth/calendar.events';
+  // drive.appdata: a hidden folder in your Google Drive that only this app can see (used to sync phone and computer)
+  const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
+  const SCOPE = CAL_SCOPE + ' ' + DRIVE_SCOPE;
   const API = 'https://www.googleapis.com/calendar/v3';
   const TOKEN_KEY = 'pmo.gtoken';
   let token = null;
   let tokenExpiry = 0;
+  let granted = '';
   let gisLoading = null;
   let client = null;
   let clientFor = '';
@@ -1745,9 +1796,9 @@ PMO.gcal = (function () {
   // Keep the access token for this tab only (about an hour), so a page reload does not ask again.
   try {
     const saved = JSON.parse(sessionStorage.getItem(TOKEN_KEY) || 'null');
-    if (saved && saved.exp > Date.now()) { token = saved.t; tokenExpiry = saved.exp; }
+    if (saved && saved.exp > Date.now()) { token = saved.t; tokenExpiry = saved.exp; granted = saved.s || CAL_SCOPE; }
   } catch (e) { /* ignore */ }
-  function remember() { try { sessionStorage.setItem(TOKEN_KEY, JSON.stringify({ t: token, exp: tokenExpiry })); } catch (e) { /* ignore */ } }
+  function remember() { try { sessionStorage.setItem(TOKEN_KEY, JSON.stringify({ t: token, exp: tokenExpiry, s: granted })); } catch (e) { /* ignore */ } }
 
   function loadGIS() {
     if (window.google && google.accounts && google.accounts.oauth2) return Promise.resolve();
@@ -1783,6 +1834,7 @@ PMO.gcal = (function () {
           if (!p) return;
           if (resp.error) { p.reject(new Error('Google 授權失敗：' + resp.error)); return; }
           token = resp.access_token;
+          granted = resp.scope || SCOPE;
           tokenExpiry = Date.now() + (Number(resp.expires_in || 3600) - 60) * 1000;
           remember();
           p.resolve();
@@ -1801,6 +1853,7 @@ PMO.gcal = (function () {
 
   function ready() { return !!client && clientFor === S.settings.googleClientId; }
   function connected() { return !!token && Date.now() < tokenExpiry; }
+  function hasDrive() { return connected() && granted.split(' ').includes(DRIVE_SCOPE); }
 
   /* Must be called directly from a tap/click handler, with no await before it. */
   function signIn() {
@@ -1809,14 +1862,24 @@ PMO.gcal = (function () {
     if (!ready()) { prepare(); return Promise.reject(new Error('Google 登入元件還在載入，請過兩秒再按一次「連接 Google」。')); }
     return new Promise((resolve, reject) => {
       pending = { resolve, reject };
-      client.requestAccessToken({ prompt: token ? '' : 'consent' });
+      client.requestAccessToken({ prompt: token && hasDrive() ? '' : 'consent' });
     });
   }
 
   function signOut() {
     if (token && window.google && google.accounts) google.accounts.oauth2.revoke(token, () => {});
-    token = null; tokenExpiry = 0;
+    token = null; tokenExpiry = 0; granted = '';
     try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) { /* ignore */ }
+  }
+
+  /* Raw authorized request to any Google API (used by sync for Drive). */
+  async function authFetch(url, init) {
+    if (!connected()) { const e = new Error('需要先登入 Google。'); e.status = 401; throw e; }
+    const opts = Object.assign({}, init || {});
+    opts.headers = Object.assign({ Authorization: 'Bearer ' + token }, opts.headers || {});
+    const res = await fetch(url, opts);
+    if (res.status === 401) { token = null; tokenExpiry = 0; }
+    return res;
   }
 
   async function call(method, path, body) {
@@ -1983,7 +2046,7 @@ PMO.gcal = (function () {
 
   async function upcoming(days) { return range(today(), addDays(today(), days || 14)); }
 
-  return { prepare, ready, signIn, signOut, connected, sync, removeAll, flushDeletes, pendingDeletes, items, upcoming, range };
+  return { prepare, ready, signIn, signOut, connected, hasDrive, authFetch, sync, removeAll, flushDeletes, pendingDeletes, items, upcoming, range };
 })();
 
 </script>
@@ -2070,6 +2133,203 @@ PMO.holidays = (function () {
   }
 
   return { regions, nameOf, current, setCurrent, pins, togglePin, cached, ensure, isLoading, error, retry, on };
+})();
+
+</script>
+  <script>
+/* ---- js/services/sync.js ---- */
+/* Phone ↔ computer sync through a hidden app folder in your own Google Drive (drive.appdata).
+   Only this app can see that folder; it is not visible in Drive and the app cannot see your other files.
+   What syncs: the work data (same as a backup) plus which items are linked to calendar events.
+   What never syncs: API keys, Google Client ID and other settings stay on each device.
+   Merging is per item: whichever device changed an item last wins, and deletions carry over. */
+PMO.sync = (function () {
+  const S = PMO.store;
+  const FILE = 'strategy-pmo-sync.json';
+  const DRIVE = 'https://www.googleapis.com/drive/v3';
+  const UPLOAD = 'https://www.googleapis.com/upload/drive/v3';
+  let running = null;
+  let pushTimer = null;
+  let status = { state: 'idle', text: '', at: '' };   // idle | syncing | ok | needAuth | error
+  const watchers = [];
+
+  const on = () => !!S.settings.syncOn;
+  function setStatus(state, text) {
+    status = { state, text: text || '', at: new Date().toISOString() };
+    watchers.forEach(fn => fn(status));
+  }
+
+  async function driveJSON(url, init) {
+    const res = await PMO.gcal.authFetch(url, init);
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const msg = (json.error && json.error.message) || ('HTTP ' + res.status);
+      const e = new Error(res.status === 403 && /has not been used|disabled/i.test(msg)
+        ? 'Google Drive API 還沒啟用。請到 Google Cloud 同一個專案啟用「Google Drive API」，等幾分鐘再試。'
+        : res.status === 401 ? '登入過期了，請再按一次「立即同步」。' : 'Google 雲端硬碟錯誤：' + msg);
+      e.status = res.status;
+      throw e;
+    }
+    return json;
+  }
+
+  async function findFile() {
+    const q = encodeURIComponent("name='" + FILE + "'");
+    const r = await driveJSON(DRIVE + '/files?spaces=appDataFolder&q=' + q + '&fields=files(id,modifiedTime,version)&pageSize=10');
+    return (r.files || [])[0] || null;
+  }
+  async function download(id) {
+    const res = await PMO.gcal.authFetch(DRIVE + '/files/' + encodeURIComponent(id) + '?alt=media');
+    if (!res.ok) throw new Error('讀不到雲端的同步檔（HTTP ' + res.status + '）');
+    return res.json();
+  }
+  async function upload(id, payload) {
+    const body = JSON.stringify(payload);
+    if (id) {
+      return driveJSON(UPLOAD + '/files/' + encodeURIComponent(id) + '?uploadType=media&fields=id,modifiedTime',
+        { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body });
+    }
+    const boundary = 'pmo' + Date.now();
+    const multipart = '--' + boundary + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' +
+      JSON.stringify({ name: FILE, parents: ['appDataFolder'], mimeType: 'application/json' }) +
+      '\r\n--' + boundary + '\r\nContent-Type: application/json\r\n\r\n' + body + '\r\n--' + boundary + '--';
+    return driveJSON(UPLOAD + '/files?uploadType=multipart&fields=id,modifiedTime',
+      { method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + boundary }, body: multipart });
+  }
+
+  async function versionOf(id) {
+    const r = await driveJSON(DRIVE + '/files/' + encodeURIComponent(id) + '?fields=version');
+    return r.version;
+  }
+
+  const later = (a, b) => (String(a || '') > String(b || '') ? a : b);
+
+  /* Merges two copies of the work data item by item. */
+  function merge(local, remote) {
+    const L = S.normalize(JSON.parse(JSON.stringify(local)));
+    const R = S.normalize(JSON.parse(JSON.stringify(remote)));
+    const ls = L.meta.stamps || {}, rs = R.meta.stamps || {};
+    const deleted = Object.assign({}, R.meta.deleted || {});
+    Object.entries(L.meta.deleted || {}).forEach(([k, v]) => { deleted[k] = later(deleted[k], v); });
+    const stamps = {};
+    // Returns the winning value for one key, or undefined when it was deleted after its last change.
+    const pick = (k, lv, rv) => {
+      let val, st;
+      if (lv !== undefined && rv !== undefined) { const useR = String(rs[k] || '') > String(ls[k] || ''); val = useR ? rv : lv; st = later(ls[k], rs[k]); }
+      else if (lv !== undefined) { val = lv; st = ls[k]; }
+      else { val = rv; st = rs[k]; }
+      if (deleted[k] && (!st || deleted[k] > st)) return undefined;
+      delete deleted[k];
+      stamps[k] = st || new Date(0).toISOString();
+      return val;
+    };
+    const out = L;
+    S.COLLECTIONS.forEach(c => {
+      const lm = new Map(L[c].map(x => [x.id, x])), rm = new Map(R[c].map(x => [x.id, x]));
+      const ids = [...lm.keys()].concat([...rm.keys()].filter(id => !lm.has(id)));
+      out[c] = ids.map(id => pick(c + ':' + id, lm.get(id), rm.get(id))).filter(x => x !== undefined);
+    });
+    ['days', 'weeks'].forEach(part => {
+      const prefix = part === 'days' ? 'rd:' : 'rw:';
+      const lo = L.rituals[part] || {}, ro = R.rituals[part] || {};
+      const res = {};
+      new Set(Object.keys(lo).concat(Object.keys(ro))).forEach(k => {
+        const v = pick(prefix + k, lo[k], ro[k]);
+        if (v !== undefined) res[k] = v;
+      });
+      out.rituals[part] = res;
+    });
+    out.quotePrefs = pick('quotePrefs', L.quotePrefs, R.quotePrefs) || L.quotePrefs;
+    out.meta.stamps = stamps;
+    out.meta.deleted = deleted;
+    out.meta.isSample = false;
+    out.meta.sampleCleaned = true;
+    out.meta.updated = later(L.meta.updated, R.meta.updated);
+    return out;
+  }
+
+  function deviceName() {
+    const ua = navigator.userAgent;
+    return /iPhone|iPad/.test(ua) ? 'iPhone／iPad' : /Android/.test(ua) ? 'Android' : /Mac/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows 電腦' : '瀏覽器';
+  }
+
+  /* One full round: download, merge, save here, upload. Returns { changed }. */
+  async function syncNow() {
+    if (running) return running;
+    running = (async () => {
+      if (!PMO.gcal.connected() || !PMO.gcal.hasDrive()) { setStatus('needAuth', '需要登入 Google 才能同步'); const e = new Error('需要先登入 Google 並允許「應用程式資料」權限。'); e.needAuth = true; throw e; }
+      setStatus('syncing', '同步中…');
+      const before = JSON.stringify(S.data);
+      const firstHere = !S.data.meta.lastSync;
+      let file = await findFile();
+      // A device that still has only the built-in sample: never push the sample to your other devices.
+      if (firstHere && S.data.meta.isSample && !file) S.removeSample();
+      let merged = S.data;
+      // If another device uploads while we merge, merge again with its copy (up to 3 tries).
+      for (let attempt = 0; file && attempt < 3; attempt++) {
+        const remote = await download(file.id);
+        if (remote && remote.data) {
+          // A device that only has the built-in sample takes the cloud copy as it is.
+          merged = firstHere && S.data.meta.isSample ? S.normalize(remote.data) : merge(S.data, remote.data);
+          const map = Object.assign({}, remote.gcalMap || {}, S.settings.gcalMap || {});
+          const del = [...new Set((S.settings.gcalDelete || []).concat(remote.gcalDelete || []))];
+          S.settings.gcalMap = map; S.settings.gcalDelete = del;
+        }
+        S.adopt(merged, {});
+        const v = await versionOf(file.id).catch(() => file.version);
+        if (!file.version || String(v) === String(file.version)) break;
+        file = Object.assign({}, file, { version: v });
+      }
+      const now = new Date().toISOString();
+      S.adopt(merged, { lastSync: now });
+      S.settings.syncLast = now; S.settings.syncFileId = file ? file.id : '';
+      const up = await upload(file && file.id, {
+        app: 'strategy-pmo', version: 1, savedAt: now, device: deviceName(),
+        data: S.data, gcalMap: S.settings.gcalMap || {}, gcalDelete: S.settings.gcalDelete || []
+      });
+      S.settings.syncFileId = up.id;
+      S.saveSettings();
+      // Another device wrote at the same moment: run once more shortly so neither side's change is lost.
+      if (file && file.version) {
+        const after = await versionOf(up.id).catch(() => null);
+        if (after && Number(after) - Number(file.version) > 1) setTimeout(() => quiet(true), 2500);
+      }
+      setStatus('ok', '已同步');
+      return { changed: JSON.stringify(S.data) !== before };
+    })();
+    try { return await running; }
+    catch (e) { if (!e.needAuth) setStatus('error', e.message); throw e; }
+    finally { running = null; }
+  }
+
+  /* Quiet sync used after edits and when the page comes back into view. Never opens a sign-in window. */
+  async function quiet(rerender) {
+    if (!on()) return;
+    if (!PMO.gcal.connected() || !PMO.gcal.hasDrive()) { setStatus('needAuth', '需要登入 Google 才能同步'); return; }
+    try {
+      const r = await syncNow();
+      const typing = document.activeElement && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
+      if (r.changed && rerender && !typing && !document.querySelector('dialog[open]')) PMO.app.render();
+    } catch (e) { /* status already shows the problem */ }
+  }
+
+  async function removeCloud() {
+    const file = await findFile();
+    if (file) await driveJSON(DRIVE + '/files/' + encodeURIComponent(file.id), { method: 'DELETE' }).catch(e => { if (e.status !== 204) throw e; });
+    S.settings.syncFileId = ''; S.saveSettings();
+  }
+
+  function start() {
+    S.onChange(info => {
+      if (!on() || (info && info.fromSync)) return;
+      clearTimeout(pushTimer);
+      pushTimer = setTimeout(() => quiet(false), 4000);
+    });
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') quiet(true); });
+    if (on()) setTimeout(() => quiet(true), 800);
+  }
+
+  return { start, syncNow, quiet, removeCloud, merge, status: () => status, onStatus: fn => watchers.push(fn), enabled: on };
 })();
 
 </script>
@@ -2193,7 +2453,7 @@ PMO.ai = (function () {
 
   const PRESETS = {
     openai: { label: 'OpenAI', url: 'https://api.openai.com/v1/chat/completions', model: 'gpt-4o-mini', auth: 'bearer' },
-    gemini: { label: 'Google Gemini', url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', model: 'gemini-2.0-flash', auth: 'bearer' },
+    gemini: { label: 'Google Gemini', url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', model: 'gemini-flash-latest', auth: 'bearer' },
     azure: { label: 'Azure OpenAI（公司端點）', url: 'https://你的資源.openai.azure.com/openai/deployments/你的部署名稱/chat/completions?api-version=2024-10-21', model: '', auth: 'api-key' },
     ollama: { label: 'Ollama（本機）', url: 'http://localhost:11434/v1/chat/completions', model: 'llama3.1', auth: 'none' }
   };
@@ -2267,7 +2527,11 @@ PMO.ai = (function () {
       body: JSON.stringify({ model: s.claudeModel || 'claude-sonnet-5-5', max_tokens: maxTokens || 1500, system, messages })
     });
     const json = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error('Claude API 錯誤：' + ((json.error && json.error.message) || 'HTTP ' + res.status));
+    if (!res.ok) {
+      if (res.status === 404) throw notFound('claude', s.claudeModel || 'claude-sonnet-5-5', json);
+      if (res.status === 401) throw new Error('Claude API key 不對或已失效，請到「設定」重新貼上。');
+      throw new Error('Claude API 錯誤：' + ((json.error && json.error.message) || 'HTTP ' + res.status));
+    }
     return (json.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n').trim();
   }
 
@@ -2286,11 +2550,53 @@ PMO.ai = (function () {
       throw new Error('連不到 AI 服務。常見原因：網址錯誤、服務不允許從瀏覽器呼叫（CORS），或需要公司內網。');
     }
     const json = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error('AI 服務錯誤：' + ((json.error && (json.error.message || json.error)) || 'HTTP ' + res.status));
+    if (!res.ok) {
+      if (res.status === 404) throw notFound('openai', s.openaiModel, json);
+      if (res.status === 401 || res.status === 403) throw new Error('AI 服務拒絕了這個 API key（' + res.status + '），請到「設定」確認金鑰和驗證方式。');
+      throw new Error('AI 服務錯誤：' + ((json.error && (json.error.message || json.error)) || 'HTTP ' + res.status));
+    }
     const choice = json.choices && json.choices[0];
     const content = choice && choice.message && choice.message.content;
     if (Array.isArray(content)) return content.map(c => c.text || '').join('\n').trim();
     return String(content || '').trim();
+  }
+
+  function notFound(kind, model, json) {
+    const detail = json && json.error && (json.error.message || (typeof json.error === 'string' ? json.error : '')) || '';
+    const e = new Error((kind === 'claude'
+      ? '找不到模型「' + model + '」（404）。模型可能改名或下架了。'
+      : '端點網址或模型「' + (model || '（未填）') + '」找不到（404）。') +
+      '請到「設定」按「列出可用模型」，點一個換上去再試。' + (detail ? '（' + String(detail).slice(0, 120) + '）' : ''));
+    e.status = 404;
+    return e;
+  }
+
+  /* Lists the models this key can use. cfg defaults to the saved settings; the settings page passes the values being edited. */
+  async function listModels(cfg) {
+    const c = Object.assign({}, S.settings, cfg || {});
+    if (c.aiProvider === 'claude') {
+      if (!c.claudeKey) throw new Error('請先填 Claude API key。');
+      const res = await fetch('https://api.anthropic.com/v1/models?limit=100', {
+        headers: { 'x-api-key': c.claudeKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' }
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(res.status === 401 ? 'API key 不對或已失效。' : 'Claude API 錯誤：' + ((json.error && json.error.message) || 'HTTP ' + res.status));
+      return (json.data || []).map(m => m.id);
+    }
+    if (!c.openaiUrl) throw new Error('請先填端點網址。');
+    let url;
+    try { const u = new URL(c.openaiUrl); u.pathname = u.pathname.replace(/\/chat\/completions\/?$/, '/models'); url = u.toString(); }
+    catch (e) { throw new Error('端點網址格式不對。'); }
+    const headers = {};
+    if (c.openaiAuth === 'bearer') headers.Authorization = 'Bearer ' + c.openaiKey;
+    if (c.openaiAuth === 'api-key') headers['api-key'] = c.openaiKey;
+    let res;
+    try { res = await fetch(url, { headers }); } catch (e) { throw new Error('連不到 AI 服務（可能是網址錯誤，或服務不允許從瀏覽器呼叫）。'); }
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(res.status === 404 ? '這個服務不提供模型清單，請照服務商文件填模型名稱。' : 'AI 服務錯誤：' + ((json.error && (json.error.message || json.error)) || 'HTTP ' + res.status));
+    const ids = (json.data || json.models || []).map(m => String(m.id || m.name || '').replace(/^models\//, '')).filter(Boolean);
+    const chatty = ids.filter(id => !/embed|tts|whisper|dall-e|image|audio|moderation|aqa|transcribe|realtime|search|veo|imagen|learnlm/i.test(id));
+    return (chatty.length ? chatty : ids).sort();
   }
 
   async function ask(messages, opts) {
@@ -2352,7 +2658,7 @@ PMO.ai = (function () {
     };
   }
 
-  return { ask, snapshot, PRESETS, providerLabel, ready, extractActions };
+  return { ask, snapshot, PRESETS, providerLabel, ready, extractActions, listModels };
 })();
 
 </script>
@@ -3336,6 +3642,7 @@ PMO.views.meeting = (function () {
   const files = {};       // meeting id -> File[] picked on this visit (never saved)
   const results = {};     // meeting id -> { summary, decisions, actions, source }
   let busy = false;
+  let aiError = '';       // last AI failure, shown in the panel until the next try
   let saveTimer = null;
   let delArmed = false;
 
@@ -3413,6 +3720,7 @@ PMO.views.meeting = (function () {
           <button class="btn" data-act="parse">從紀錄抓待辦（不用 AI）</button>
         </div>
         <p class="hint">${aiOk ? `會把紀錄和附件送到「${esc(PMO.ai.providerLabel())}」。` : 'AI 還沒設定，到「設定」填入 API key 就能用；不用 AI 也可以先「從紀錄抓待辦」。'}公司機密資料請先確認公司規定，例如是否只能用公司核准的 AI 端點。</p>
+        ${aiError ? `<div class="notice" style="margin-top:10px"><b>沒有整理成功。</b> ${esc(aiError)} <a href="#/settings">到設定</a></div>` : ''}
         ${resultHtml}
       </section>
 
@@ -3450,8 +3758,11 @@ PMO.views.meeting = (function () {
   }
 
   function mount(root, params) {
-    const m = L.get(params.id) || L.get((location.hash.split('/')[2] || ''));
-    if (!m) return;
+    const mid = (L.get(params.id) || L.get((location.hash.split('/')[2] || '')) || {}).id;
+    if (!mid) return;
+    // Always look the meeting up again: a sync from another device can replace the data underneath this page.
+    const live = () => L.get(mid) || {};
+    const m = new Proxy({}, { get: (_, k) => live()[k], set: (_, k, v) => { live()[k] = v; return true; } });
     delArmed = delArmed && root.dataset.mt === m.id;
     root.dataset.mt = m.id;
     const savedEl = () => document.getElementById('mt-saved');
@@ -3521,13 +3832,14 @@ PMO.views.meeting = (function () {
         const picked = files[m.id] || [];
         if (!m.notes.trim() && !picked.length) { ui.toast('先寫一點紀錄或附上檔案'); return; }
         clearTimeout(saveTimer); S.save();
-        busy = true; PMO.app.render();
+        busy = true; aiError = ''; PMO.app.render();
         try {
           const parts = await PMO.files.read(picked);
           const r = await PMO.ai.extractActions({ title: m.title, date: m.date, unitName: m.buId ? S.buName(m.buId) : '', attendees: m.attendees, notes: m.notes + (m.decisions ? '\n\n【決議與重點】\n' + m.decisions : ''), parts });
           results[m.id] = Object.assign(r, { source: 'ai' });
           if (picked.length) { m.files = [...new Set(m.files.concat(picked.map(f => f.name)))]; S.save(); }
-        } catch (err) { ui.toast(err.message); }
+          aiError = '';
+        } catch (err) { aiError = err.message; }
         busy = false;
         if (location.hash === '#/meeting/' + m.id) PMO.app.render();
         return;
@@ -4193,6 +4505,8 @@ PMO.views.settings = (function () {
               <div class="hint">到 console.anthropic.com 建立，建議設定每月用量上限。</div></div>
             <div class="field"><label for="s_model">模型</label>
               <input type="text" id="s_model" name="claudeModel" value="${esc(s.claudeModel)}"></div>
+            <div class="actions"><button type="button" class="btn sm" data-act="list-models" data-for="claudeModel">列出可用模型</button><button type="button" class="btn sm" data-act="test-ai">測試連線</button></div>
+            <div class="model-list" data-list="claudeModel"></div>
           </div>
 
           <div id="openai-fields" ${isClaude ? 'hidden' : ''}>
@@ -4211,6 +4525,8 @@ PMO.views.settings = (function () {
             </div>
             <div class="field"><label for="s_okey">API key</label>
               <input type="password" id="s_okey" name="openaiKey" value="${esc(s.openaiKey)}" autocomplete="off"></div>
+            <div class="actions"><button type="button" class="btn sm" data-act="list-models" data-for="openaiModel">列出可用模型</button><button type="button" class="btn sm" data-act="test-ai">測試連線</button></div>
+            <div class="model-list" data-list="openaiModel"></div>
             <div class="hint">從瀏覽器直接呼叫時，服務必須允許跨網域（CORS）。OpenAI、Gemini 一般可以；公司的 Azure 或內部閘道要問 IT 是否開放。</div>
           </div>
 
@@ -4252,6 +4568,32 @@ PMO.views.settings = (function () {
         f.elements.openaiUrl.value = p.url; f.elements.openaiModel.value = p.model; f.elements.openaiAuth.value = p.auth;
         ui.toast('已套用 ' + p.label + '，記得按儲存');
       }
+      const draft = () => { const o = {}; ['aiProvider', 'claudeKey', 'claudeModel', 'openaiUrl', 'openaiAuth', 'openaiModel', 'openaiKey'].forEach(k => { o[k] = f.elements[k].value.trim(); }); return o; };
+      if (act === 'list-models') {
+        const box = root.querySelector(`[data-list="${a.dataset.for}"]`);
+        box.innerHTML = '<p class="small muted">讀取中…</p>';
+        try {
+          const ids = await PMO.ai.listModels(draft());
+          box.innerHTML = ids.length ? `<p class="small muted" style="margin:8px 0 4px">點一個就會換上並儲存：</p><div class="chips">${ids.map(id => `<button type="button" class="chip" data-act="pick-model" data-for="${a.dataset.for}" data-id="${esc(id)}">${esc(id)}</button>`).join('')}</div>` : '<p class="small muted">沒有列出任何模型。</p>';
+        } catch (err) { box.innerHTML = `<p class="small" style="color:var(--bad)">${esc(err.message)}</p>`; }
+        return;
+      }
+      if (act === 'pick-model') {
+        f.elements[a.dataset.for].value = a.dataset.id;
+        S.settings[a.dataset.for] = a.dataset.id; S.saveSettings();
+        ui.toast('已換成 ' + a.dataset.id + ' 並儲存');
+        return;
+      }
+      if (act === 'test-ai') {
+        const before = Object.assign({}, S.settings);
+        Object.assign(S.settings, draft());
+        a.disabled = true; ui.toast('測試中…');
+        try { const r = await PMO.ai.ask([{ role: 'user', content: '請只回覆「連線成功」四個字。' }]); ui.toast('成功：' + String(r).slice(0, 30)); }
+        catch (err) { ui.toast(err.message); }
+        Object.keys(S.settings).forEach(k => { S.settings[k] = before[k]; });
+        a.disabled = false;
+        return;
+      }
       if (act === 'forget-key') { S.settings.claudeKey = ''; S.settings.openaiKey = ''; S.saveSettings(); ui.toast('已清除 AI 金鑰'); PMO.app.render(); }
       if (act === 'notify-on') {
         try { await PMO.notify.enable(); ui.toast('已開啟提醒'); } catch (err) { ui.toast(err.message); }
@@ -4262,6 +4604,117 @@ PMO.views.settings = (function () {
         const n = PMO.notify.dueItems().length;
         try { localStorage.removeItem('pmo.notified'); } catch (_) { /* ignore */ } PMO.notify.check();
         ui.toast(n ? '有 ' + n + ' 件到期，已送出通知' : '目前沒有到期的事');
+      }
+    };
+  }
+
+  return { render, mount };
+})();
+
+</script>
+  <script>
+/* ---- js/views/sync.js ---- */
+/* 手機與電腦同步: turn on Google Drive sync, see its status, and the one-time setup steps. */
+PMO.views = PMO.views || {};
+
+PMO.views.sync = (function () {
+  const S = PMO.store;
+  const { esc } = PMO.util;
+  const ui = PMO.ui;
+  let busy = false;
+  let lastError = '';
+  let removeArmed = false;
+
+  const when = iso => {
+    if (!iso) return '還沒同步過';
+    const d = new Date(iso);
+    const mins = Math.round((Date.now() - d) / 60000);
+    const hm = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    return mins < 1 ? '剛剛' : mins < 60 ? mins + ' 分鐘前（' + hm + '）' : (d.getMonth() + 1) + '/' + d.getDate() + ' ' + hm;
+  };
+
+  function render() {
+    const hasId = !!S.settings.googleClientId;
+    const isFile = location.protocol === 'file:';
+    const on = PMO.sync.enabled();
+    const st = PMO.sync.status();
+    const signed = PMO.gcal.hasDrive();
+    const html = `
+      <div class="page-head"><div><h1>手機與電腦同步</h1><p>在手機和電腦都打開同一個工作台網址，資料會透過你自己 Google 雲端硬碟裡的隱藏資料夾同步。</p></div></div>
+
+      ${!hasId ? '<div class="notice"><b>先設定 Google Client ID。</b> 同步和 Google 日曆用同一組，到「設定」填好再回來。每台裝置都要各填一次（設定不會同步）。</div>' : ''}
+      ${isFile ? '<div class="notice">目前是直接開啟檔案，要用 GitHub Pages 的網址打開才能同步。</div>' : ''}
+
+      <section class="panel">
+        <div class="panel-head"><h2>這台裝置</h2>
+          <span class="light-pill ${on && st.state === 'ok' ? 'ok' : on ? 'warn' : 'none'}">${!on ? '未開啟' : st.state === 'syncing' ? '同步中' : st.state === 'error' ? '同步失敗' : !signed ? '需要登入' : '同步中（自動）'}</span></div>
+        <p style="margin-top:0">上次同步：${esc(when(S.settings.syncLast))}</p>
+        ${lastError || (on && st.state === 'error') ? `<div class="notice"><b>沒有同步成功。</b> ${esc(lastError || st.text)}</div>` : ''}
+        ${on && !signed && S.settings.syncLast ? '<p class="hint" style="margin-top:0">Google 登入大約一小時會過期。過期後改的東西會先存在這台，按「立即同步」重新登入就會補上傳。</p>' : ''}
+        <div class="actions">
+          <button class="btn primary" data-act="sync" ${!hasId || isFile || busy ? 'disabled' : ''}>${busy ? '同步中…' : on ? '立即同步' : '開啟同步'}</button>
+          ${on ? '<button class="btn ghost" data-act="off">在這台關閉同步</button>' : ''}
+        </div>
+        <p class="hint">開啟後，改了東西 4 秒內會自動上傳；切回這個分頁時會自動抓別台的更新。同一筆資料兩台都改過，以最後改的為準；刪掉的也會同步刪掉。</p>
+      </section>
+
+      <section class="panel">
+        <h2>第一次設定（只要做一次）</h2>
+        <ol class="steps">
+          <li>到 Google Cloud，在<b>做日曆時用的同一個專案</b>裡啟用 <b>Google Drive API</b>：<br><a href="https://console.cloud.google.com/apis/library/drive.googleapis.com" target="_blank" rel="noopener">打開 Google Drive API 頁面</a>，確認上方選的是同一個專案，按「啟用」。</li>
+          <li>同一個專案的「OAuth 同意畫面」→「資料存取」→「新增或移除範圍」，勾選 <code>.../auth/drive.appdata</code>，儲存。</li>
+          <li>先在<b>資料比較完整的那台</b>（通常是手機）按「開啟同步」，登入時兩個權限都要勾。</li>
+          <li>再到另一台（公司電腦）用同一個網址打開，到「設定」填同一組 Client ID，回到這頁按「開啟同步」。那台如果只有範例資料，會直接換成雲端的資料。</li>
+        </ol>
+        <p class="hint">drive.appdata 只能存取這個工作台自己的隱藏資料夾，看不到你雲端硬碟裡的其他檔案；資料夾在雲端硬碟裡也看不到。API key 等設定不會上傳。</p>
+      </section>
+
+      <section class="panel">
+        <h2>用公司電腦前想一下</h2>
+        <ul class="tight">
+          <li>公司電腦登入個人 Google 帳號、把工作紀錄存到個人雲端，有些公司規定不允許，先確認一下比較安心。</li>
+          <li>如果公司網路擋 Google 登入，可以改用「備份與匯出」：在一台下載備份檔，另一台用「合併」匯入。</li>
+          <li>公司電腦是共用的話，不要在那台存 AI 的 API key；用完可以在「設定」清除金鑰。</li>
+        </ul>
+      </section>
+
+      ${S.settings.syncFileId || on ? `<section class="panel">
+        <h2>刪除雲端的同步資料</h2>
+        <p style="margin-top:0">只刪除 Google 雲端硬碟裡的同步檔，每台裝置上的資料都會保留。</p>
+        <button class="btn ghost danger" data-act="remove" ${!signed ? 'disabled' : ''}>${removeArmed ? '再按一次：確定刪除雲端資料' : '刪除雲端同步檔'}</button>
+        ${!signed ? '<p class="hint">要先按「立即同步」登入才能刪除。</p>' : ''}
+      </section>` : ''}`;
+    return { title: '手機與電腦同步', html };
+  }
+
+  function mount(root) {
+    PMO.gcal.prepare().catch(err => { lastError = err.message; });
+    root.onclick = e => {
+      const a = e.target.closest('[data-act]');
+      if (!a || a.disabled) return;
+      const act = a.dataset.act;
+      if (act !== 'remove') removeArmed = false;
+      if (act === 'sync') {
+        if (!PMO.gcal.ready()) { PMO.gcal.prepare(); ui.toast('Google 登入元件還在載入，請過兩秒再按一次'); return; }
+        // Phones only allow the sign-in window if it opens right inside the tap, so sign in before anything else.
+        const login = PMO.gcal.hasDrive() ? Promise.resolve() : PMO.gcal.signIn();
+        busy = true; lastError = '';
+        login.then(() => {
+          if (!PMO.gcal.hasDrive()) throw new Error('登入時沒有勾選「查看、建立及刪除自己的應用程式設定資料」，請再按一次並勾選。');
+          S.settings.syncOn = true; S.saveSettings();
+          PMO.app.render();
+          return PMO.sync.syncNow();
+        }).then(r => { ui.toast(r && r.changed ? '已同步，並更新了別台的資料' : '已同步'); })
+          .catch(err => { lastError = err.message; })
+          .finally(() => { busy = false; PMO.app.render(); });
+        return;
+      }
+      if (act === 'off') { S.settings.syncOn = false; S.saveSettings(); ui.toast('這台已關閉同步，資料保留在這台'); PMO.app.render(); return; }
+      if (act === 'remove') {
+        if (!removeArmed) { removeArmed = true; PMO.app.render(); return; }
+        removeArmed = false;
+        PMO.sync.removeCloud().then(() => { S.settings.syncOn = false; S.saveSettings(); ui.toast('已刪除雲端同步檔，這台的同步也關閉了'); })
+          .catch(err => { lastError = err.message; }).finally(() => PMO.app.render());
       }
     };
   }
@@ -4770,6 +5223,15 @@ PMO.app = (function () {
   function renderBackupHint() {
     const days = PMO.backup.daysSinceBackup();
     const el = document.getElementById('backup-hint');
+    if (PMO.sync && PMO.sync.enabled()) {
+      const st = PMO.sync.status();
+      const signed = PMO.gcal.hasDrive();
+      el.innerHTML = st.state === 'syncing' ? '<span class="muted">同步中…</span>'
+        : st.state === 'error' ? '<a href="#/sync" style="color:var(--bad)">同步失敗</a>'
+        : !signed ? '<a href="#/sync">按此同步</a>'
+        : '<a href="#/sync" class="muted">已同步</a>';
+      return;
+    }
     if (days == null || days >= 7) {
       el.innerHTML = `<a href="#/backup">${days == null ? '還沒備份過' : days + ' 天沒備份'}</a>`;
     } else el.innerHTML = '';
@@ -4829,6 +5291,7 @@ PMO.app = (function () {
 
   applyTheme();
   if (PMO.notify) PMO.notify.start();
+  if (PMO.sync) { PMO.sync.onStatus(() => renderBackupHint()); PMO.sync.start(); }
   return { render, applyTheme };
 })();
 
