@@ -539,7 +539,7 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
           <a href="#/backup" data-nav="backup">備份與匯出</a>
           <a href="#/settings" data-nav="settings">設定</a>
         </div>
-        <p class="nav-version">版本 10/19・同步</p>
+        <p class="nav-version">版本 10/19・同步・AI 修正</p>
       </nav>
     </aside>
 
@@ -815,6 +815,8 @@ PMO.store = (function () {
   const storedSettings = readJSON(SETTINGS_KEY) || {};
   let settings = Object.assign({}, defaultSettings, storedSettings);
   settings.gcalInclude = Object.assign({}, defaultSettings.gcalInclude, storedSettings.gcalInclude || {});
+  // Gemini 1.x / 2.0 models were shut down by Google; move to the alias that follows the current Flash model.
+  if (/^gemini-(1\.|2\.0)/.test(settings.openaiModel || '')) { settings.openaiModel = 'gemini-flash-latest'; writeJSON(SETTINGS_KEY, settings); }
   /* Change stamps for syncing between devices: every item (and each ritual day, and quote preferences) gets the time it last
      changed in meta.stamps, and removed items leave a mark in meta.deleted, so two devices can be merged item by item. */
   const COLLECTIONS = ['bus', 'projects', 'tasks', 'followups', 'routines', 'indicators', 'wins', 'questions', 'quotes', 'meetings'];
@@ -2549,7 +2551,8 @@ PMO.ai = (function () {
     } catch (e) {
       throw new Error('連不到 AI 服務。常見原因：網址錯誤、服務不允許從瀏覽器呼叫（CORS），或需要公司內網。');
     }
-    const json = await res.json().catch(() => ({}));
+    let json = await res.json().catch(() => ({}));
+    if (Array.isArray(json)) json = json[0] || {};
     if (!res.ok) {
       if (res.status === 404) throw notFound('openai', s.openaiModel, json);
       if (res.status === 401 || res.status === 403) throw new Error('AI 服務拒絕了這個 API key（' + res.status + '），請到「設定」確認金鑰和驗證方式。');
@@ -2599,10 +2602,42 @@ PMO.ai = (function () {
     return (chatty.length ? chatty : ids).sort();
   }
 
+  /* Picks a sensible replacement from the models this key can use. */
+  function pickModel(ids, provider, current) {
+    const pref = provider === 'claude'
+      ? [/sonnet/, /opus/, /haiku/]
+      : /gemini/.test(current || '') || ids.some(id => /gemini/.test(id))
+        ? [/^gemini-flash-latest$/, /^gemini-[\d.]+-flash$/, /flash(?!.*(lite|image|tts|live))/, /gemini/]
+        : [/mini$/, /^gpt-/, /./];
+    const sorted = ids.slice().sort().reverse();   // newest version numbers first
+    for (const re of pref) { const hit = sorted.find(id => re.test(id) && !/preview|exp|lite|image|tts|live|audio|thinking/i.test(id)); if (hit) return hit; }
+    return sorted[0] || '';
+  }
+
+  let lastSwitch = null;
+  /* When the saved model no longer exists (404), switch to one this key can use and try once more. */
+  async function withFallback(run) {
+    try { return await run(); }
+    catch (e) {
+      if (e.status !== 404) throw e;
+      const s = S.settings;
+      const field = s.aiProvider === 'claude' ? 'claudeModel' : 'openaiModel';
+      let ids = [];
+      try { ids = await listModels(); } catch (_) { throw e; }
+      const next = pickModel(ids, s.aiProvider, s[field]);
+      if (!next || next === s[field]) throw e;
+      const from = s[field];
+      s[field] = next; S.saveSettings();
+      lastSwitch = { from, to: next };
+      return run();
+    }
+  }
+  function takeSwitch() { const x = lastSwitch; lastSwitch = null; return x; }
+
   async function ask(messages, opts) {
     const system = systemPrompt(opts && opts.context);
     const msgs = messages.map(m => ({ role: m.role, content: m.content }));
-    return S.settings.aiProvider === 'claude' ? askClaude(msgs, system) : askOpenAI(msgs, system);
+    return withFallback(() => S.settings.aiProvider === 'claude' ? askClaude(msgs, system) : askOpenAI(msgs, system));
   }
 
   /* Meeting notes (and attachments) → summary, decisions and action items, as JSON. */
@@ -2636,7 +2671,7 @@ PMO.ai = (function () {
         .concat(binParts.map(x => ({ type: 'image_url', image_url: { url: 'data:' + x.mime + ';base64,' + x.data } })));
     }
     const system = '你是細心的會議記錄整理助理，只根據提供的內容整理，使用繁體中文。';
-    const raw = claude ? await askClaude([{ role: 'user', content }], system, 3000) : await askOpenAI([{ role: 'user', content }], system, 3000);
+    const raw = await withFallback(() => claude ? askClaude([{ role: 'user', content }], system, 3000) : askOpenAI([{ role: 'user', content }], system, 3000));
     return parseJSON(raw);
   }
 
@@ -2658,7 +2693,7 @@ PMO.ai = (function () {
     };
   }
 
-  return { ask, snapshot, PRESETS, providerLabel, ready, extractActions, listModels };
+  return { ask, snapshot, PRESETS, providerLabel, ready, extractActions, listModels, takeSwitch, pickModel };
 })();
 
 </script>
@@ -3837,6 +3872,8 @@ PMO.views.meeting = (function () {
           const parts = await PMO.files.read(picked);
           const r = await PMO.ai.extractActions({ title: m.title, date: m.date, unitName: m.buId ? S.buName(m.buId) : '', attendees: m.attendees, notes: m.notes + (m.decisions ? '\n\n【決議與重點】\n' + m.decisions : ''), parts });
           results[m.id] = Object.assign(r, { source: 'ai' });
+          const sw = PMO.ai.takeSwitch();
+          if (sw) ui.toast('原本的模型「' + sw.from + '」找不到，已自動換成「' + sw.to + '」');
           if (picked.length) { m.files = [...new Set(m.files.concat(picked.map(f => f.name)))]; S.save(); }
           aiError = '';
         } catch (err) { aiError = err.message; }
@@ -4232,6 +4269,8 @@ PMO.views.ai = (function () {
       const context = scope === 'none' ? '' : PMO.ai.snapshot(scope);
       const history = messages.filter(m => m.role === 'user' || m.role === 'assistant');
       const reply = await PMO.ai.ask(history, { context });
+      const sw = PMO.ai.takeSwitch();
+      if (sw) ui.toast('原本的模型「' + sw.from + '」找不到，已自動換成「' + sw.to + '」');
       messages.push({ role: 'assistant', content: reply || '（沒有回覆內容）' });
     } catch (e) {
       messages.push({ role: 'error', content: e.message });
@@ -4588,9 +4627,17 @@ PMO.views.settings = (function () {
         const before = Object.assign({}, S.settings);
         Object.assign(S.settings, draft());
         a.disabled = true; ui.toast('測試中…');
-        try { const r = await PMO.ai.ask([{ role: 'user', content: '請只回覆「連線成功」四個字。' }]); ui.toast('成功：' + String(r).slice(0, 30)); }
-        catch (err) { ui.toast(err.message); }
+        let msg;
+        try { const r = await PMO.ai.ask([{ role: 'user', content: '請只回覆「連線成功」四個字。' }]); msg = '成功：' + String(r).slice(0, 30); }
+        catch (err) { msg = err.message; }
+        const sw = PMO.ai.takeSwitch();
         Object.keys(S.settings).forEach(k => { S.settings[k] = before[k]; });
+        if (sw) {
+          const field = f.elements.aiProvider.value === 'claude' ? 'claudeModel' : 'openaiModel';
+          f.elements[field].value = sw.to; S.settings[field] = sw.to; S.saveSettings();
+          msg += '（原本的「' + sw.from + '」找不到，已換成「' + sw.to + '」並儲存）';
+        }
+        ui.toast(msg);
         a.disabled = false;
         return;
       }
