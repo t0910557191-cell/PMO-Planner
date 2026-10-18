@@ -1,0 +1,3288 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>策略 PMO 工作台</title>
+  <meta name="description" content="個人用的策略 PMO 工作台：快速記錄、排優先順序、追蹤回覆、例行事項、領先與落後指標、成果紀錄、Google 日曆同步與 AI 諮詢。">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;700&display=swap">
+  <style>
+/* 策略 PMO 工作台
+   Layout: left sidebar navigation + main column; collapses to a slide-in drawer under 860px. */
+:root {
+  --bg: #eef1f0;
+  --surface: #f9fbfa;
+  --surface-2: #e4eae8;
+  --ink: #1d2826;
+  --muted: #5b6966;
+  --line: #d2dad7;
+  --accent: #2f6b62;
+  --accent-ink: #ffffff;
+  --accent-soft: #d9e8e4;
+  --warm: #a3643a;
+  --warm-soft: #f3e6dc;
+  --ok: #2e7d4f;
+  --ok-soft: #dcefe3;
+  --warn: #a8700c;
+  --warn-soft: #f6ead0;
+  --bad: #b23a3a;
+  --bad-soft: #f5dddd;
+  --shadow: 0 1px 2px rgba(20, 40, 36, .06), 0 4px 16px rgba(20, 40, 36, .06);
+  --display: "Noto Serif TC", "Songti TC", "PMingLiU", serif;
+  --body: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --radius: 12px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #131918; --surface: #1b2321; --surface-2: #232d2b; --ink: #e2eae7; --muted: #98a7a3;
+    --line: #2e3a37; --accent: #7cc0b3; --accent-ink: #0f1a18; --accent-soft: #22362f;
+    --warm: #e0a172; --warm-soft: #33261d; --ok: #6cc28f; --ok-soft: #1d3326; --warn: #e2b452;
+    --warn-soft: #382d16; --bad: #ec8a8a; --bad-soft: #3a1f1f; --shadow: 0 1px 2px rgba(0,0,0,.3);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #131918; --surface: #1b2321; --surface-2: #232d2b; --ink: #e2eae7; --muted: #98a7a3;
+  --line: #2e3a37; --accent: #7cc0b3; --accent-ink: #0f1a18; --accent-soft: #22362f;
+  --warm: #e0a172; --warm-soft: #33261d; --ok: #6cc28f; --ok-soft: #1d3326; --warn: #e2b452;
+  --warn-soft: #382d16; --bad: #ec8a8a; --bad-soft: #3a1f1f; --shadow: 0 1px 2px rgba(0,0,0,.3);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--body); font-size: 15px; line-height: 1.65;
+}
+a { color: var(--accent); }
+h1, h2, h3 { text-wrap: balance; line-height: 1.3; }
+h1 { font-family: var(--display); font-size: 1.7rem; margin: 0; }
+h2 { font-family: var(--display); font-size: 1.2rem; margin: 0 0 12px; }
+h3 { font-size: 1rem; margin: 0 0 6px; }
+[hidden] { display: none !important; }
+
+/* App shell */
+.app { display: grid; grid-template-columns: 240px 1fr; min-height: 100%; }
+.nav {
+  background: var(--surface); border-right: 1px solid var(--line);
+  padding: 20px 14px; display: flex; flex-direction: column; gap: 18px;
+  position: sticky; top: 0; height: 100vh; overflow-y: auto;
+}
+.brand { display: flex; gap: 10px; align-items: center; padding: 0 6px; }
+.brand-mark {
+  width: 34px; height: 34px; border-radius: 9px; background: var(--accent); color: var(--accent-ink);
+  display: grid; place-items: center; font-family: var(--display); font-weight: 700;
+}
+.brand-name { font-family: var(--display); font-weight: 700; }
+.brand-sub { font-size: .78rem; color: var(--muted); }
+nav { display: flex; flex-direction: column; gap: 14px; }
+nav a, .nav-add {
+  display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 8px;
+  color: var(--ink); text-decoration: none; font: inherit; background: none; border: 0; text-align: left; cursor: pointer; width: 100%;
+}
+nav a:hover, .nav-add:hover { background: var(--surface-2); }
+nav a.active { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
+.nav-group { display: flex; flex-direction: column; gap: 2px; }
+.nav-label { font-size: .72rem; letter-spacing: .1em; color: var(--muted); padding: 0 10px 4px; }
+.nav-add { color: var(--muted); font-size: .9rem; }
+.dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+
+.main { min-width: 0; display: flex; flex-direction: column; }
+.topbar {
+  display: flex; align-items: center; gap: 12px; padding-block: 12px;
+  padding-left: max(24px, env(safe-area-inset-left, 0px)); padding-right: max(24px, env(safe-area-inset-right, 0px));
+  border-bottom: 1px solid var(--line); background: var(--bg); position: sticky; top: 0; z-index: 5;
+}
+.topbar-title { font-weight: 700; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topbar-right { font-size: .85rem; }
+.menu-btn { display: none; font-size: 1.2rem; background: none; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); padding: 2px 10px; cursor: pointer; }
+#view {
+  padding-block: 24px 64px;
+  padding-left: max(24px, env(safe-area-inset-left, 0px)); padding-right: max(24px, env(safe-area-inset-right, 0px));
+  max-width: 1180px; width: 100%; outline: none;
+  display: flex; flex-direction: column; gap: 24px;
+}
+
+@media (max-width: 860px) {
+  .app { grid-template-columns: 1fr; }
+  .nav {
+    position: fixed; inset: 0 auto 0 0; width: 270px; z-index: 20; transform: translateX(-100%);
+    transition: transform .2s ease; box-shadow: var(--shadow);
+    padding-top: calc(20px + env(safe-area-inset-top, 0px));
+  }
+  .nav.open { transform: none; }
+  .menu-btn { display: inline-block; }
+  .topbar { top: env(safe-area-inset-top, 0px); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  #view { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+}
+@media (prefers-reduced-motion: reduce) { .nav { transition: none; } }
+
+/* Building blocks */
+.page-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.page-head p { margin: 4px 0 0; color: var(--muted); }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; min-width: 0; }
+.panel-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.panel-head h2 { margin: 0; }
+.grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.grid-2 { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+.muted { color: var(--muted); }
+.small { font-size: .85rem; }
+.empty { color: var(--muted); padding: 12px 0; }
+.stack { display: flex; flex-direction: column; gap: 10px; }
+
+.btn {
+  font: inherit; font-size: .9rem; border-radius: 8px; padding: 6px 14px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+}
+.btn:hover { background: var(--surface-2); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover { filter: brightness(1.05); }
+.btn.ghost { background: transparent; }
+.btn.danger { color: var(--bad); }
+.btn.sm { padding: 3px 10px; font-size: .82rem; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+
+.pill { display: inline-flex; align-items: center; gap: 4px; font-size: .78rem; padding: 1px 9px; border-radius: 999px; white-space: nowrap; }
+.pill.on { background: var(--ok-soft); color: var(--ok); }
+.pill.risk { background: var(--warn-soft); color: var(--warn); }
+.pill.off { background: var(--bad-soft); color: var(--bad); }
+.pill.done { background: var(--surface-2); color: var(--muted); }
+.pill.H { background: var(--bad-soft); color: var(--bad); }
+.pill.M { background: var(--warn-soft); color: var(--warn); }
+.pill.L { background: var(--surface-2); color: var(--muted); }
+.pill.tag { background: var(--accent-soft); color: var(--accent); }
+
+/* BU cards */
+.bu-card { display: flex; flex-direction: column; gap: 10px; text-decoration: none; color: inherit; border-left: 4px solid var(--c, var(--accent)); }
+.bu-card:hover { box-shadow: var(--shadow); }
+.bu-card .counts { display: flex; gap: 6px; flex-wrap: wrap; }
+.stat-row { display: flex; gap: 20px; flex-wrap: wrap; }
+.stat b { display: block; font-size: 1.6rem; font-family: var(--display); font-variant-numeric: tabular-nums; }
+.stat span { font-size: .82rem; color: var(--muted); }
+
+/* Lists */
+.list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.list li { display: flex; gap: 10px; align-items: flex-start; padding: 9px 0; border-top: 1px solid var(--line); min-width: 0; }
+.list li:first-child { border-top: 0; }
+.list .grow { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.date { font-variant-numeric: tabular-nums; color: var(--muted); font-size: .85rem; white-space: nowrap; min-width: 84px; }
+.date.over { color: var(--bad); font-weight: 500; }
+.check { width: 18px; height: 18px; margin-top: 3px; accent-color: var(--accent); flex: none; }
+.done-text { text-decoration: line-through; color: var(--muted); }
+
+/* Project rows */
+.proj-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; padding: 12px 0; border-top: 1px solid var(--line); text-decoration: none; color: inherit; }
+.proj-row:first-child { border-top: 0; }
+.proj-row:hover .proj-name { color: var(--accent); }
+.proj-name { font-weight: 500; }
+.proj-meta { grid-column: 1 / -1; font-size: .85rem; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; }
+.progress { height: 6px; background: var(--surface-2); border-radius: 3px; overflow: hidden; grid-column: 1 / -1; }
+.progress i { display: block; height: 100%; background: var(--accent); }
+
+/* Tables */
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 500; color: var(--muted); font-size: .8rem; white-space: nowrap; }
+td.num { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+
+/* Forms */
+.field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; min-width: 0; }
+.field label { font-size: .85rem; color: var(--muted); }
+.field-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0 12px; }
+input[type="text"], input[type="date"], input[type="number"], input[type="password"], input[type="url"], select, textarea {
+  font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 8px; padding: 7px 10px; width: 100%; min-width: 0;
+}
+textarea { resize: vertical; min-height: 80px; }
+input[type="color"] { width: 48px; height: 34px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); padding: 2px; }
+.hint { font-size: .8rem; color: var(--muted); }
+code, .mono { font-family: var(--mono); font-size: .85em; }
+pre.out {
+  background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow: auto;
+  max-height: 360px; font-family: var(--mono); font-size: .82rem; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0;
+}
+
+/* Modal */
+dialog {
+  border: 1px solid var(--line); border-radius: 14px; padding: 0; background: var(--surface); color: var(--ink);
+  width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 48px); box-shadow: var(--shadow);
+}
+dialog::backdrop { background: rgba(10, 20, 18, .45); }
+dialog form { padding: 20px; display: flex; flex-direction: column; }
+#modal-body { overflow-y: auto; max-height: calc(100vh - 220px); padding-right: 2px; }
+.modal-actions { display: flex; gap: 8px; margin-top: 8px; }
+.spacer { flex: 1; }
+
+/* Toast */
+#toast {
+  position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
+  background: var(--ink); color: var(--bg); padding: 8px 16px; border-radius: 999px; font-size: .9rem;
+  opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 50; max-width: calc(100vw - 32px);
+}
+#toast.show { opacity: 1; }
+
+/* Notice */
+.notice { border-radius: 10px; padding: 12px 14px; font-size: .9rem; background: var(--warm-soft); color: var(--ink); border: 1px solid var(--line); }
+.notice b { color: var(--warm); }
+.notice.ok { background: var(--ok-soft); }
+
+/* Rituals */
+.ritual-focus { background: var(--accent-soft); border-color: transparent; }
+.ritual-focus label { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; padding: 6px 0; }
+.quote { font-family: var(--display); color: var(--accent); }
+.force { display: flex; flex-direction: column; gap: 10px; }
+.force-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; }
+.force-row .bar { grid-column: 1 / -1; height: 7px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+.force-row .bar i { display: block; height: 100%; background: var(--accent); }
+details.ref { border-top: 1px solid var(--line); padding: 10px 0; }
+details.ref:first-of-type { border-top: 0; }
+details.ref summary { cursor: pointer; font-weight: 500; }
+details.ref ul, details.ref ol { margin: 6px 0 0; padding-left: 1.3em; }
+
+/* AI chat */
+.chat { display: flex; flex-direction: column; gap: 12px; }
+.msg { max-width: 85%; padding: 10px 14px; border-radius: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg.user { align-self: flex-end; background: var(--accent); color: var(--accent-ink); }
+.msg.assistant { align-self: flex-start; background: var(--surface-2); }
+.msg.error { align-self: stretch; background: var(--bad-soft); color: var(--bad); max-width: none; }
+.chat-input { display: flex; gap: 8px; align-items: flex-end; }
+.chat-input textarea { min-height: 60px; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { font: inherit; font-size: .82rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 3px 11px; cursor: pointer; }
+.chip:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ---- v2: rows, capture, matrix, indicators ---- */
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.dot.big { width: 12px; height: 12px; display: inline-block; margin-right: 10px; vertical-align: middle; }
+.row-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 3px; }
+.unit-tag { display: inline-flex; align-items: center; gap: 5px; font-size: .78rem; color: var(--muted); }
+.unit-tag .dot { width: 7px; height: 7px; }
+.list li .btn { flex: none; }
+ul.plain { margin: 0; padding-left: 1.2em; }
+ul.plain li { margin: 4px 0; }
+
+.capture { padding: 12px; }
+.capture-form { display: grid; grid-template-columns: 1fr auto auto auto; gap: 8px; }
+.capture-form input { font-size: 1rem; }
+@media (max-width: 640px) { .capture-form { grid-template-columns: 1fr 1fr; } .capture-form input { grid-column: 1 / -1; } .capture-form .btn { grid-column: 1 / -1; } }
+.focus-panel { border-color: var(--accent); }
+
+.toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.toolbar select { width: auto; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: var(--surface); }
+.seg button { font: inherit; font-size: .88rem; border: 0; background: none; color: var(--ink); padding: 6px 12px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button.on { background: var(--accent); color: var(--accent-ink); }
+
+.quad-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 760px) { .quad-grid { grid-template-columns: 1fr; } }
+.quad { border-top: 4px solid var(--line); }
+.quad-do { border-top-color: var(--bad); }
+.quad-plan { border-top-color: var(--accent); }
+.quad-quick { border-top-color: var(--warn); }
+.quad-later { border-top-color: var(--line); }
+.quad h2 .small { font-family: var(--body); font-weight: 400; }
+
+.pill.lead { background: var(--accent-soft); color: var(--accent); }
+.pill.lag { background: var(--surface-2); color: var(--ink); }
+.light-pill { display: inline-flex; align-items: center; gap: 5px; font-size: .78rem; padding: 1px 9px; border-radius: 999px; white-space: nowrap; }
+.light-pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.light-pill.ok { background: var(--ok-soft); color: var(--ok); }
+.light-pill.warn { background: var(--warn-soft); color: var(--warn); }
+.light-pill.bad { background: var(--bad-soft); color: var(--bad); }
+.light-pill.none { background: var(--surface-2); color: var(--muted); }
+.c-ok { color: var(--ok); } .c-warn { color: var(--warn); } .c-bad { color: var(--bad); }
+
+.ind-card { display: flex; flex-direction: column; gap: 8px; border-left: 4px solid var(--line); }
+.ind-card.light-ok { border-left-color: var(--ok); }
+.ind-card.light-warn { border-left-color: var(--warn); }
+.ind-card.light-bad { border-left-color: var(--bad); }
+.ind-card h3 { margin: 0; }
+.ind-head { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.ind-head .light-pill { margin-left: auto; }
+.ind-value { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.ind-value b { font-family: var(--display); font-size: 1.6rem; font-variant-numeric: tabular-nums; }
+.trend { font-size: .8rem; color: var(--muted); }
+.trend.up { color: var(--ok); } .trend.down { color: var(--bad); }
+.spark { width: 100%; max-width: 100%; height: 40px; display: block; }
+.spark-line { stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.spark-target { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; }
+.spark-dot { fill: var(--accent); }
+.spark-empty { height: 40px; display: flex; align-items: center; }
+
+.mini-stats { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; font-size: .88rem; color: var(--muted); }
+.mini-stats b { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+.bars { display: flex; flex-direction: column; gap: 4px; }
+.bar-row { display: grid; grid-template-columns: 9em 1fr 2em; gap: 10px; align-items: center; font: inherit; font-size: .9rem; color: var(--ink);
+  background: none; border: 0; padding: 4px 6px; border-radius: 6px; cursor: pointer; text-align: left; }
+.bar-row:hover, .bar-row.on { background: var(--surface-2); }
+.bar-track { height: 8px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+.bar-row:hover .bar-track, .bar-row.on .bar-track { background: var(--bg); }
+.bar-track i { display: block; height: 100%; background: var(--accent); }
+@media (max-width: 480px) { .bar-row { grid-template-columns: 7.5em 1fr 1.6em; } }
+
+</style>
+</head>
+<body>
+  <div class="app">
+    <aside class="nav" id="nav">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">P</div>
+        <div>
+          <div class="brand-name">策略 PMO</div>
+          <div class="brand-sub">工作台</div>
+        </div>
+      </div>
+      <nav aria-label="主選單">
+        <div class="nav-group">
+          <a href="#/today" data-nav="today">今天</a>
+          <a href="#/dashboard" data-nav="dashboard">總覽</a>
+          <a href="#/tasks" data-nav="tasks">任務</a>
+          <a href="#/followups" data-nav="followups">等待回覆</a>
+          <a href="#/routines" data-nav="routines">例行事項</a>
+          <a href="#/indicators" data-nav="indicators">指標</a>
+        </div>
+        <div class="nav-group">
+          <div class="nav-label">負責的單位</div>
+          <div id="nav-bus"></div>
+          <button type="button" class="nav-add" data-action="bu-new">＋ 新增單位</button>
+        </div>
+        <div class="nav-group">
+          <div class="nav-label">記錄與成長</div>
+          <a href="#/questions" data-nav="questions">問題清單</a>
+          <a href="#/wins" data-nav="wins">成果紀錄</a>
+          <a href="#/rituals" data-nav="rituals">慢半拍儀式</a>
+        </div>
+        <div class="nav-group">
+          <div class="nav-label">工具</div>
+          <a href="#/ai" data-nav="ai">AI 諮詢</a>
+          <a href="#/calendar" data-nav="calendar">Google 日曆</a>
+          <a href="#/connectors" data-nav="connectors">API 連接</a>
+          <a href="#/backup" data-nav="backup">備份與匯出</a>
+          <a href="#/settings" data-nav="settings">設定</a>
+        </div>
+      </nav>
+    </aside>
+
+    <div class="main">
+      <header class="topbar">
+        <button type="button" class="menu-btn" id="menu-btn" aria-label="開啟選單" aria-controls="nav" aria-expanded="false">☰</button>
+        <div class="topbar-title" id="topbar-title">今天</div>
+        <div class="topbar-right" id="backup-hint"></div>
+      </header>
+      <main id="view" tabindex="-1"></main>
+    </div>
+  </div>
+
+  <dialog id="modal">
+    <form method="dialog" id="modal-form" novalidate>
+      <h2 id="modal-title"></h2>
+      <div id="modal-body"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn ghost danger" id="modal-delete" hidden>刪除</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn ghost" id="modal-cancel">取消</button>
+        <button type="submit" class="btn primary" id="modal-ok">儲存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+/* ---- js/util.js ---- */
+/* Shared helpers. Everything hangs off one global namespace so the app also runs from file:// without a build step. */
+window.PMO = window.PMO || {};
+
+PMO.util = (function () {
+  function esc(v) {
+    return String(v == null ? '' : v)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function uid(prefix) {
+    return (prefix || 'id') + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  }
+
+  function pad(n) { return String(n).padStart(2, '0'); }
+
+  // Local calendar date as YYYY-MM-DD (not UTC, so late-night entries land on the right day).
+  function today() {
+    const d = new Date();
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  }
+
+  function addDays(dateStr, n) {
+    const d = parseDate(dateStr);
+    d.setDate(d.getDate() + n);
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  }
+
+  function parseDate(s) {
+    const [y, m, d] = String(s).split('-').map(Number);
+    return new Date(y, (m || 1) - 1, d || 1);
+  }
+
+  function daysBetween(a, b) {
+    return Math.round((parseDate(b) - parseDate(a)) / 86400000);
+  }
+
+  function fmtDate(s) {
+    if (!s) return '—';
+    const d = parseDate(s);
+    return d.getFullYear() + '/' + pad(d.getMonth() + 1) + '/' + pad(d.getDate());
+  }
+
+  // ISO week key, e.g. 2026-W42
+  function weekKey(dateStr) {
+    const d = parseDate(dateStr || today());
+    const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    const day = t.getUTCDay() || 7;
+    t.setUTCDate(t.getUTCDate() + 4 - day);
+    const yearStart = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+    const week = Math.ceil(((t - yearStart) / 86400000 + 1) / 7);
+    return t.getUTCFullYear() + '-W' + pad(week);
+  }
+
+  function download(filename, content, mime) {
+    const blob = new Blob([content], { type: mime || 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }
+
+  async function copy(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (e) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      let ok = false;
+      try { ok = document.execCommand('copy'); } catch (_) { ok = false; }
+      ta.remove();
+      return ok;
+    }
+  }
+
+  function readFile(file) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.onerror = () => reject(r.error);
+      r.readAsText(file);
+    });
+  }
+
+  return { esc, uid, today, addDays, parseDate, daysBetween, fmtDate, weekKey, download, copy, readFile, pad };
+})();
+
+</script>
+  <script>
+/* ---- js/store.js ---- */
+/* Data store. Work data and secrets are kept under separate localStorage keys:
+   - pmo.data      → units, projects, tasks, follow-ups, routines, indicators, wins, questions, rituals (exported in backups)
+   - pmo.settings  → API keys, Google client ID, connectors (keys are never exported) */
+PMO.store = (function () {
+  const DATA_KEY = 'pmo.data';
+  const SETTINGS_KEY = 'pmo.settings';
+  const SCHEMA = 2;
+  const listeners = [];
+  const { uid, today, addDays } = PMO.util;
+
+  const STATUS = { on: '進度正常', risk: '有風險', off: '落後', done: '已完成' };
+  const LEVEL = { H: '高', M: '中', L: '低' };
+  const UNIT_TYPE = { hq: '總部職能', bu: '事業單位', rd: '研發／產品', other: '其他' };
+  const BSC = { fin: '財務', cust: '客戶', proc: '內部流程', learn: '學習成長' };
+  const COMPETENCIES = ['流程數位化', 'KPI／OKR', '數據分析', '成本／管理會計', '生成式 AI 應用', '專案管理', '跨部門協調', '決策支援與簡報', '風險管理'];
+
+  function sample() {
+    const t = today();
+    const bus = [
+      { id: 'u_hr', name: '人資', type: 'hq', color: '#a3643a', owner: '', counterpart: '', notes: '範例單位，可改名、停用或刪除', archived: false },
+      { id: 'u_fin', name: '財務', type: 'hq', color: '#2f6b62', owner: '', counterpart: '', notes: '範例單位', archived: false },
+      { id: 'u_ops', name: '營運', type: 'hq', color: '#5a6fb0', owner: '', counterpart: '', notes: '範例單位', archived: false },
+      { id: 'u_rd', name: '產品研發', type: 'rd', color: '#8a5ca8', owner: '', counterpart: '', notes: '範例單位', archived: false }
+    ];
+    const projects = [
+      {
+        id: uid('p'), buId: 'u_fin', name: '管理報表資料盤點（範例）', status: 'on', stage: '需求盤點',
+        owner: '我', start: addDays(t, -14), due: addDays(t, 45),
+        summary: '先把需要的資料來源、欄位、更新頻率列清楚，再決定儀表板要放哪些指標。',
+        milestones: [
+          { id: uid('m'), title: '列出現有月報與資料來源', date: addDays(t, -3), done: true },
+          { id: uid('m'), title: '與單位主管確認指標清單', date: addDays(t, 6), done: false },
+          { id: uid('m'), title: '資料需求清單定稿', date: addDays(t, 20), done: false }
+        ],
+        risks: [{ id: uid('r'), title: '部分報表仍為手工 Excel，欄位定義不一致', level: 'M', mitigation: '先統一定義，再談自動化', status: 'open' }],
+        kpis: [], logs: []
+      },
+      {
+        id: uid('p'), buId: 'u_rd', name: '開發專案追蹤表（範例）', status: 'risk', stage: '框架設計',
+        owner: '我', start: addDays(t, -7), due: addDays(t, 60),
+        summary: '整理開發案的階段、里程碑與風險，做成每月一頁的追蹤表。',
+        milestones: [{ id: uid('m'), title: '對口到位、約第一次對齊會', date: addDays(t, 3), done: false }],
+        risks: [{ id: uid('r'), title: '單位人力吃緊，提供資料的時間有限', level: 'H', mitigation: '先用既有報告整理，減少額外索取', status: 'open' }],
+        kpis: [], logs: []
+      }
+    ];
+    const tasks = [
+      { id: uid('t'), title: '整理這週要跟主管報告的三個重點', buId: '', due: addDays(t, 1), importance: 'H', effort: 'S', status: 'todo', triaged: true, notes: '', created: t },
+      { id: uid('t'), title: '寄出資料需求清單給財務對口', buId: 'u_fin', due: t, importance: 'H', effort: 'S', status: 'todo', triaged: true, notes: '', created: t },
+      { id: uid('t'), title: '讀完一章管理會計的書', buId: '', due: addDays(t, 7), importance: 'M', effort: 'M', status: 'todo', triaged: true, notes: '', created: t },
+      { id: uid('t'), title: '想法：人資 KPI 可以先從招募週期開始', buId: 'u_hr', due: '', importance: '', effort: '', status: 'todo', triaged: false, notes: '', created: t }
+    ];
+    const followups = [
+      { id: uid('f'), what: '月報欄位定義表', who: '財務對口', buId: 'u_fin', channel: 'Email', askedOn: addDays(t, -4), nudgeOn: addDays(t, -1), status: 'waiting', notes: '' },
+      { id: uid('f'), what: '開發案時程表', who: '研發企劃', buId: 'u_rd', channel: 'Teams', askedOn: addDays(t, -1), nudgeOn: addDays(t, 3), status: 'waiting', notes: '' }
+    ];
+    const routines = [
+      { id: uid('rt'), title: '月結後確認財務月報是否更新', buId: 'u_fin', cadence: 'monthly', day: 10, lastDone: '', notes: '' },
+      { id: uid('rt'), title: '更新各單位 KPI 燈號', buId: '', cadence: 'weekly', day: 5, lastDone: '', notes: '每週五' },
+      { id: uid('rt'), title: '季度成果整理（代表作紀錄）', buId: '', cadence: 'quarterly', day: 1, lastDone: '', notes: '' }
+    ];
+    const kPrev = (n) => addDays(t, -7 * n);
+    const leadId = uid('i');
+    const indicators = [
+      { id: leadId, name: '資料需求清單完成度', buId: 'u_fin', kind: 'lead', perspective: 'proc', unit: '%', direction: 'up', target: 100, warnPct: 15,
+        driverOf: '', notes: '自己追蹤的進度，非公司數字',
+        values: [{ period: kPrev(3), value: 20 }, { period: kPrev(2), value: 35 }, { period: kPrev(1), value: 45 }, { period: t, value: 50 }] },
+      { id: uid('i'), name: '準時交付的週報比例', buId: '', kind: 'lag', perspective: 'learn', unit: '%', direction: 'up', target: 100, warnPct: 10,
+        driverOf: '', notes: '我自己的工作指標',
+        values: [{ period: kPrev(3), value: 100 }, { period: kPrev(2), value: 75 }, { period: kPrev(1), value: 100 }, { period: t, value: 100 }] },
+      { id: uid('i'), name: '等待回覆超過 5 天的件數', buId: '', kind: 'lead', perspective: 'proc', unit: '件', direction: 'down', target: 0, warnPct: 2,
+        driverOf: '', notes: '越少越好；超過目標就是黃燈或紅燈',
+        values: [{ period: kPrev(2), value: 3 }, { period: kPrev(1), value: 2 }, { period: t, value: 1 }] }
+    ];
+    const wins = [
+      { id: uid('w'), date: addDays(t, -2), title: '整理出第一版資料需求清單（範例）', buId: 'u_fin',
+        impact: '讓後續儀表板只需要索取 12 份既有報表，不必另做新表。', tags: ['流程數位化', '數據分析'], english: '' }
+    ];
+    return {
+      schema: SCHEMA, bus, projects, tasks, followups, routines, indicators, wins,
+      questions: [{ id: uid('q'), buId: 'u_rd', text: '開發追蹤表，主管希望先看哪三個指標？', status: 'parked', created: t, answer: '' }],
+      rituals: { days: {}, weeks: {} },
+      meta: { created: new Date().toISOString(), updated: new Date().toISOString(), lastBackup: null, isSample: true }
+    };
+  }
+
+  function emptyData() {
+    return {
+      schema: SCHEMA, bus: [], projects: [], tasks: [], followups: [], routines: [], indicators: [], wins: [], questions: [],
+      rituals: { days: {}, weeks: {} },
+      meta: { created: new Date().toISOString(), updated: new Date().toISOString(), lastBackup: null, isSample: false }
+    };
+  }
+
+  const defaultSettings = {
+    theme: 'system',
+    googleClientId: '',
+    gcalCalendarId: 'primary',
+    gcalInclude: { milestones: true, tasks: true, followups: true },
+    aiProvider: 'claude',
+    claudeKey: '',
+    claudeModel: 'claude-sonnet-5-5',
+    openaiUrl: 'https://api.openai.com/v1/chat/completions',
+    openaiKey: '',
+    openaiModel: 'gpt-4o-mini',
+    openaiAuth: 'bearer',
+    aiSystemNote: '',
+    notify: false,
+    connectors: [],
+    gcalMap: {}
+  };
+
+  function readJSON(key) {
+    try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : null; } catch (e) { return null; }
+  }
+  function writeJSON(key, value) {
+    try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch (e) { console.error('Save failed', e); return false; }
+  }
+
+  const arr = v => (Array.isArray(v) ? v : []);
+  function normalize(d) {
+    const base = emptyData();
+    const out = Object.assign(base, d || {});
+    out.bus = arr(out.bus).map(b => Object.assign({ type: 'other', archived: false, owner: '', counterpart: '', notes: '', color: '#2f6b62' }, b));
+    out.projects = arr(out.projects).map(p => Object.assign({ milestones: [], risks: [], kpis: [], logs: [], status: 'on', stage: '', owner: '', summary: '' }, p));
+    out.tasks = arr(out.tasks).map(t => Object.assign({ buId: '', due: '', importance: '', effort: '', status: 'todo', triaged: true, notes: '' }, t));
+    out.followups = arr(out.followups).map(f => Object.assign({ buId: '', channel: '', status: 'waiting', notes: '' }, f));
+    out.routines = arr(out.routines).map(r => Object.assign({ buId: '', cadence: 'weekly', day: 1, lastDone: '', notes: '' }, r));
+    out.indicators = arr(out.indicators).map(i => Object.assign({ buId: '', kind: 'lag', perspective: 'proc', unit: '', direction: 'up', target: null, warnPct: 10, driverOf: '', notes: '', values: [] }, i));
+    out.wins = arr(out.wins).map(w => Object.assign({ buId: '', impact: '', tags: [], english: '' }, w));
+    out.questions = arr(out.questions);
+    out.rituals = Object.assign({ days: {}, weeks: {} }, out.rituals || {});
+    out.meta = Object.assign(base.meta, out.meta || {});
+    out.schema = SCHEMA;
+    return out;
+  }
+
+  let data = readJSON(DATA_KEY);
+  data = data ? normalize(data) : sample();
+  const storedSettings = readJSON(SETTINGS_KEY) || {};
+  let settings = Object.assign({}, defaultSettings, storedSettings);
+  settings.gcalInclude = Object.assign({}, defaultSettings.gcalInclude, storedSettings.gcalInclude || {});
+  let saveOk = writeJSON(DATA_KEY, data);
+
+  function save() {
+    data.meta.updated = new Date().toISOString();
+    saveOk = writeJSON(DATA_KEY, data);
+    listeners.forEach(fn => fn());
+    return saveOk;
+  }
+  function saveSettings() { return writeJSON(SETTINGS_KEY, settings); }
+  function onChange(fn) { listeners.push(fn); }
+
+  // Queries
+  function bu(id) { return data.bus.find(b => b.id === id); }
+  function activeBus() { return data.bus.filter(b => !b.archived); }
+  function buName(id) { const b = bu(id); return b ? b.name : '不分單位'; }
+  function project(id) { return data.projects.find(p => p.id === id); }
+  function projectsOf(buId) { return data.projects.filter(p => p.buId === buId); }
+  function unitOptions(includeNone) {
+    const opts = data.bus.filter(b => !b.archived).map(b => ({ value: b.id, label: b.name }));
+    return includeNone ? [{ value: '', label: '不分單位' }].concat(opts) : opts;
+  }
+
+  function allMilestones() {
+    const out = [];
+    data.projects.forEach(p => (p.milestones || []).forEach(m => out.push({ m, p, b: bu(p.buId) })));
+    return out.sort((a, b) => String(a.m.date).localeCompare(String(b.m.date)));
+  }
+
+  function progress(p) {
+    const ms = p.milestones || [];
+    if (!ms.length) return p.status === 'done' ? 100 : 0;
+    return Math.round(ms.filter(m => m.done).length / ms.length * 100);
+  }
+
+  /* Task priority. Urgent = due within 2 days or overdue. Score combines importance, urgency and effort (quick wins float up). */
+  function taskUrgent(t) {
+    if (!t.due) return false;
+    return PMO.util.daysBetween(today(), t.due) <= 2;
+  }
+  function quadrant(t) {
+    const imp = t.importance === 'H';
+    const urg = taskUrgent(t);
+    if (imp && urg) return 'do';
+    if (imp) return 'plan';
+    if (urg) return 'quick';
+    return 'later';
+  }
+  function taskScore(t) {
+    const imp = { H: 3, M: 2, L: 1 }[t.importance] || 1;
+    let urg = 0;
+    if (t.due) {
+      const d = PMO.util.daysBetween(today(), t.due);
+      urg = d < 0 ? 4 : d === 0 ? 3.5 : d <= 2 ? 3 : d <= 7 ? 2 : d <= 14 ? 1 : 0;
+    }
+    const eff = { S: 1, M: 0, L: -1 }[t.effort] || 0;
+    return Math.round((imp * 3 + urg * 2 + eff) * 10) / 10;
+  }
+
+  /* Routines: next due date from cadence + lastDone. weekly → day = 1..7 (Mon..Sun); monthly/quarterly → day of month. */
+  function routineNext(r) {
+    const t = today();
+    const { parseDate, pad } = PMO.util;
+    const fmt = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+    const from = r.lastDone ? addDays(r.lastDone, 1) : t;
+    const start = parseDate(from);
+    if (r.cadence === 'weekly') {
+      const want = Number(r.day) || 1;
+      const d = new Date(start);
+      for (let i = 0; i < 8; i++) {
+        const wd = d.getDay() || 7;
+        if (wd === want) return fmt(d);
+        d.setDate(d.getDate() + 1);
+      }
+      return fmt(d);
+    }
+    const step = r.cadence === 'quarterly' ? 3 : 1;
+    const day = Math.min(Math.max(Number(r.day) || 1, 1), 28);
+    let d = new Date(start.getFullYear(), start.getMonth(), day);
+    if (r.cadence === 'quarterly') {
+      // Quarter months: Jan, Apr, Jul, Oct
+      while (d.getMonth() % 3 !== 0 || d < start) d = new Date(d.getFullYear(), d.getMonth() + 1, day);
+    } else {
+      if (d < start) d = new Date(d.getFullYear(), d.getMonth() + step, day);
+    }
+    return fmt(d);
+  }
+
+  /* Indicator light: ok / warn / bad / none, based on the latest value vs target. */
+  function indicatorLatest(i) {
+    const vs = (i.values || []).slice().sort((a, b) => String(a.period).localeCompare(String(b.period)));
+    return vs.length ? vs[vs.length - 1] : null;
+  }
+  function indicatorLight(i) {
+    const last = indicatorLatest(i);
+    if (!last || i.target == null || i.target === '' || last.value == null) return 'none';
+    const v = Number(last.value), tgt = Number(i.target);
+    const warn = Math.abs(Number(i.warnPct) || 0) / 100;
+    if (i.direction === 'down') {
+      if (v <= tgt) return 'ok';
+      const limit = tgt === 0 ? (Number(i.warnPct) || 0) : tgt * (1 + warn);
+      return v <= limit ? 'warn' : 'bad';
+    }
+    if (v >= tgt) return 'ok';
+    return v >= tgt * (1 - warn) ? 'warn' : 'bad';
+  }
+  function indicatorTrend(i) {
+    const vs = (i.values || []).slice().sort((a, b) => String(a.period).localeCompare(String(b.period)));
+    if (vs.length < 2) return 0;
+    const diff = Number(vs[vs.length - 1].value) - Number(vs[vs.length - 2].value);
+    const good = i.direction === 'down' ? -diff : diff;
+    return good > 0 ? 1 : good < 0 ? -1 : 0;
+  }
+
+  // Mutations
+  function upsert(list, item) {
+    const i = list.findIndex(x => x.id === item.id);
+    if (i >= 0) list[i] = Object.assign(list[i], item); else list.push(item);
+    return item;
+  }
+  function removeBu(id) {
+    data.bus = data.bus.filter(b => b.id !== id);
+    data.projects = data.projects.filter(p => p.buId !== id);
+    data.questions = data.questions.filter(q => q.buId !== id);
+    ['tasks', 'followups', 'routines', 'indicators', 'wins'].forEach(k => data[k].forEach(x => { if (x.buId === id) x.buId = ''; }));
+  }
+  function replaceAll(newData) { data = normalize(newData); save(); }
+  function reset(withSample) { data = withSample ? sample() : emptyData(); save(); }
+
+  return {
+    STATUS, LEVEL, UNIT_TYPE, BSC, COMPETENCIES,
+    get data() { return data; },
+    get settings() { return settings; },
+    get saveOk() { return saveOk; },
+    save, saveSettings, onChange,
+    bu, activeBus, buName, unitOptions, project, projectsOf, allMilestones, progress,
+    quadrant, taskScore, taskUrgent, routineNext, indicatorLatest, indicatorLight, indicatorTrend,
+    upsert, removeBu, replaceAll, reset, normalize
+  };
+})();
+
+</script>
+  <script>
+/* ---- js/ui.js ---- */
+/* UI helpers: toast, modal forms, status pills. */
+PMO.ui = (function () {
+  const { esc } = PMO.util;
+  let toastTimer;
+
+  function toast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
+  }
+
+  function statusPill(s) {
+    return `<span class="pill ${esc(s)}">${esc(PMO.store.STATUS[s] || s)}</span>`;
+  }
+  function levelPill(l) {
+    return `<span class="pill ${esc(l)}">風險${esc(PMO.store.LEVEL[l] || l)}</span>`;
+  }
+
+  /* fields: [{name,label,type,value,options,hint,required,placeholder,row}]
+     Returns a promise of the submitted values, 'delete', or null when cancelled. */
+  function form({ title, fields, okText, allowDelete }) {
+    const dlg = document.getElementById('modal');
+    const body = document.getElementById('modal-body');
+    const formEl = document.getElementById('modal-form');
+    const delBtn = document.getElementById('modal-delete');
+    const cancelBtn = document.getElementById('modal-cancel');
+    document.getElementById('modal-title').textContent = title;
+    document.getElementById('modal-ok').textContent = okText || '儲存';
+    delBtn.hidden = !allowDelete;
+
+    const renderField = f => {
+      const id = 'f_' + f.name;
+      const req = f.required ? 'required' : '';
+      let input;
+      if (f.type === 'textarea') {
+        input = `<textarea id="${id}" name="${esc(f.name)}" ${req} placeholder="${esc(f.placeholder || '')}">${esc(f.value || '')}</textarea>`;
+      } else if (f.type === 'select') {
+        input = `<select id="${id}" name="${esc(f.name)}">${f.options.map(o =>
+          `<option value="${esc(o.value)}" ${String(o.value) === String(f.value) ? 'selected' : ''}>${esc(o.label)}</option>`).join('')}</select>`;
+      } else if (f.type === 'checkbox') {
+        input = `<label class="small"><input type="checkbox" id="${id}" name="${esc(f.name)}" ${f.value ? 'checked' : ''}> ${esc(f.checkLabel || '')}</label>`;
+      } else {
+        input = `<input type="${esc(f.type || 'text')}" id="${id}" name="${esc(f.name)}" value="${esc(f.value == null ? '' : f.value)}" ${req} placeholder="${esc(f.placeholder || '')}" ${f.type === 'number' ? 'step="any"' : ''}>`;
+      }
+      return `<div class="field"><label for="${id}">${esc(f.label)}</label>${input}${f.hint ? `<div class="hint">${esc(f.hint)}</div>` : ''}</div>`;
+    };
+
+    // Group consecutive fields flagged with row:true into one responsive row.
+    let html = '';
+    let rowBuf = [];
+    const flush = () => { if (rowBuf.length) { html += `<div class="field-row">${rowBuf.join('')}</div>`; rowBuf = []; } };
+    fields.forEach(f => { if (f.row) rowBuf.push(renderField(f)); else { flush(); html += renderField(f); } });
+    flush();
+    body.innerHTML = html;
+
+    return new Promise(resolve => {
+      const cleanup = () => {
+        formEl.onsubmit = null; delBtn.onclick = null; cancelBtn.onclick = null; dlg.onclose = null;
+      };
+      formEl.onsubmit = e => {
+        e.preventDefault();
+        const missing = fields.find(f => f.required && !String(formEl.elements[f.name].value || '').trim());
+        if (missing) { toast('請填寫「' + missing.label + '」'); formEl.elements[missing.name].focus(); return; }
+        const out = {};
+        fields.forEach(f => {
+          const el = formEl.elements[f.name];
+          if (f.type === 'checkbox') out[f.name] = el.checked;
+          else if (f.type === 'number') out[f.name] = el.value === '' ? null : Number(el.value);
+          else out[f.name] = el.value.trim();
+        });
+        cleanup(); dlg.close(); resolve(out);
+      };
+      delBtn.onclick = () => {
+        if (delBtn.dataset.armed === '1') {
+          delBtn.dataset.armed = ''; delBtn.textContent = '刪除';
+          cleanup(); dlg.close(); resolve('delete');
+        } else {
+          delBtn.dataset.armed = '1'; delBtn.textContent = '再按一次確認刪除';
+        }
+      };
+      cancelBtn.onclick = () => { cleanup(); dlg.close(); resolve(null); };
+      dlg.onclose = () => { cleanup(); resolve(null); };
+      delBtn.dataset.armed = ''; delBtn.textContent = '刪除';
+      dlg.showModal();
+      const first = body.querySelector('input,select,textarea');
+      if (first) first.focus();
+    });
+  }
+
+  return { toast, statusPill, levelPill, form };
+})();
+
+</script>
+  <script>
+/* ---- js/editors.js ---- */
+/* Shared add/edit dialogs for every kind of record. Each returns the saved item, or null. */
+PMO.edit = (function () {
+  const S = PMO.store;
+  const { uid, today, addDays } = PMO.util;
+  const ui = PMO.ui;
+
+  const IMPORTANCE = [{ value: 'H', label: '高：影響主管或單位的重點' }, { value: 'M', label: '中' }, { value: 'L', label: '低' }];
+  const EFFORT = [{ value: 'S', label: '小：30 分鐘內' }, { value: 'M', label: '中：半天內' }, { value: 'L', label: '大：要排時間' }];
+
+  function finish(list, cur, r, msgNew) {
+    if (r === 'delete') {
+      S.data[list] = S.data[list].filter(x => x.id !== cur.id);
+      S.save(); ui.toast('已刪除');
+      return null;
+    }
+    const item = S.upsert(S.data[list], Object.assign({ id: cur.id || uid(list.slice(0, 2)) }, cur.id ? {} : (cur.__defaults || {}), r));
+    S.save(); ui.toast(cur.id ? '已更新' : msgNew);
+    return item;
+  }
+
+  async function bu(existing) {
+    const b = existing || {};
+    const r = await ui.form({
+      title: existing ? '編輯單位' : '新增單位',
+      allowDelete: !!existing,
+      fields: [
+        { name: 'name', label: '名稱', value: b.name, required: true, placeholder: '例如：人資' },
+        { name: 'type', label: '類型', type: 'select', value: b.type || 'hq', row: true,
+          options: Object.keys(S.UNIT_TYPE).map(k => ({ value: k, label: S.UNIT_TYPE[k] })) },
+        { name: 'color', label: '代表色', type: 'color', value: b.color || '#2f6b62', row: true },
+        { name: 'owner', label: '單位主管', value: b.owner, row: true },
+        { name: 'counterpart', label: '我的對口', value: b.counterpart, placeholder: '例如：單位企劃', row: true },
+        { name: 'notes', label: '備註', type: 'textarea', value: b.notes, placeholder: '這個單位的重點、要注意的事' },
+        { name: 'archived', label: '停用', type: 'checkbox', value: b.archived, checkLabel: '暫時不負責這個單位（資料保留，從選單隱藏）' }
+      ]
+    });
+    if (!r) return null;
+    if (r === 'delete') {
+      S.removeBu(b.id); S.save(); ui.toast('已刪除「' + b.name + '」，相關任務改為不分單位');
+      location.hash = '#/today';
+      return null;
+    }
+    const item = S.upsert(S.data.bus, Object.assign({ id: b.id || uid('u') }, r));
+    S.save(); ui.toast(existing ? '已更新' : '已新增「' + item.name + '」');
+    return item;
+  }
+
+  async function project(buId, existing) {
+    const p = existing || {};
+    const r = await ui.form({
+      title: existing ? '編輯專案' : '新增專案',
+      allowDelete: !!existing,
+      fields: [
+        { name: 'name', label: '專案名稱', value: p.name, required: true },
+        { name: 'buId', label: '單位', type: 'select', value: p.buId || buId, options: S.unitOptions(false).concat(
+          p.buId && S.bu(p.buId) && S.bu(p.buId).archived ? [{ value: p.buId, label: S.buName(p.buId) + '（停用）' }] : []) },
+        { name: 'status', label: '狀態', type: 'select', value: p.status || 'on', row: true, options: Object.keys(S.STATUS).map(k => ({ value: k, label: S.STATUS[k] })) },
+        { name: 'stage', label: '階段', value: p.stage, placeholder: '例如：需求盤點', row: true },
+        { name: 'owner', label: '負責人', value: p.owner || '我', row: true },
+        { name: 'start', label: '開始', type: 'date', value: p.start || today(), row: true },
+        { name: 'due', label: '到期', type: 'date', value: p.due || addDays(today(), 30), row: true },
+        { name: 'summary', label: '摘要', type: 'textarea', value: p.summary, placeholder: '一兩句話說明目標和範圍' }
+      ]
+    });
+    if (!r) return null;
+    if (r === 'delete') {
+      S.data.projects = S.data.projects.filter(x => x.id !== p.id);
+      S.save(); ui.toast('已刪除專案');
+      location.hash = '#/bu/' + p.buId;
+      return null;
+    }
+    const item = S.upsert(S.data.projects, Object.assign({ id: p.id || uid('p'), milestones: [], risks: [], kpis: [], logs: [] }, r));
+    S.save(); ui.toast(existing ? '已更新' : '已新增專案');
+    return item;
+  }
+
+  async function task(existing, defaults) {
+    const cur = Object.assign({}, existing || {}, { __defaults: { status: 'todo', created: today(), triaged: true } });
+    const d = defaults || {};
+    const r = await ui.form({
+      title: existing ? (existing.triaged === false ? '整理這一則' : '編輯任務') : '新增任務',
+      allowDelete: !!existing,
+      fields: [
+        { name: 'title', label: '要做什麼', value: cur.title, required: true },
+        { name: 'buId', label: '單位', type: 'select', value: cur.buId != null ? cur.buId : (d.buId || ''), row: true, options: S.unitOptions(true) },
+        { name: 'due', label: '截止日', type: 'date', value: cur.due || d.due || '', row: true },
+        { name: 'importance', label: '重要性', type: 'select', value: cur.importance || 'M', row: true, options: IMPORTANCE },
+        { name: 'effort', label: '花多少力氣', type: 'select', value: cur.effort || 'M', row: true, options: EFFORT },
+        { name: 'status', label: '狀態', type: 'select', value: cur.status || 'todo', row: true,
+          options: [{ value: 'todo', label: '待辦' }, { value: 'doing', label: '進行中' }, { value: 'done', label: '完成' }] },
+        { name: 'notes', label: '備註', type: 'textarea', value: cur.notes }
+      ]
+    });
+    if (!r) return null;
+    if (r !== 'delete') { r.triaged = true; if (r.status === 'done' && !cur.doneOn) r.doneOn = today(); }
+    return finish('tasks', cur, r, '已新增任務');
+  }
+
+  async function followup(existing, defaults) {
+    const cur = existing || {};
+    const d = defaults || {};
+    const r = await ui.form({
+      title: existing ? '編輯追蹤' : '新增等待回覆',
+      allowDelete: !!existing,
+      fields: [
+        { name: 'what', label: '等什麼', value: cur.what || d.what, required: true, placeholder: '例如：月報欄位定義表' },
+        { name: 'who', label: '跟誰要', value: cur.who, required: true, row: true },
+        { name: 'channel', label: '管道', value: cur.channel, placeholder: 'Email、Teams、口頭', row: true },
+        { name: 'buId', label: '單位', type: 'select', value: cur.buId != null ? cur.buId : (d.buId || ''), options: S.unitOptions(true) },
+        { name: 'askedOn', label: '提出日', type: 'date', value: cur.askedOn || today(), row: true },
+        { name: 'nudgeOn', label: '哪天提醒我追', type: 'date', value: cur.nudgeOn || addDays(today(), 3), row: true },
+        { name: 'status', label: '狀態', type: 'select', value: cur.status || 'waiting', row: true,
+          options: [{ value: 'waiting', label: '等待中' }, { value: 'done', label: '已收到' }] },
+        { name: 'notes', label: '備註', type: 'textarea', value: cur.notes, placeholder: '追的時候可以怎麼說' }
+      ]
+    });
+    if (!r) return null;
+    return finish('followups', cur, r, '已加入等待回覆');
+  }
+
+  async function routine(existing) {
+    const cur = existing || {};
+    const r = await ui.form({
+      title: existing ? '編輯例行事項' : '新增例行事項',
+      allowDelete: !!existing,
+      fields: [
+        { name: 'title', label: '事項', value: cur.title, required: true, placeholder: '例如：月結後確認月報是否更新' },
+        { name: 'buId', label: '單位', type: 'select', value: cur.buId || '', options: S.unitOptions(true) },
+        { name: 'cadence', label: '頻率', type: 'select', value: cur.cadence || 'weekly', row: true,
+          options: [{ value: 'weekly', label: '每週' }, { value: 'monthly', label: '每月' }, { value: 'quarterly', label: '每季（1、4、7、10 月）' }] },
+        { name: 'day', label: '哪一天', type: 'number', value: cur.day || 1, row: true, hint: '每週填 1–7（週一到週日）；每月、每季填 1–28 號' },
+        { name: 'notes', label: '備註', type: 'textarea', value: cur.notes }
+      ]
+    });
+    if (!r) return null;
+    return finish('routines', cur, r, '已新增例行事項');
+  }
+
+  async function indicator(existing, defaults) {
+    const cur = Object.assign({}, existing || {}, { __defaults: { values: [] } });
+    const d = defaults || {};
+    const others = S.data.indicators.filter(i => i.id !== cur.id).map(i => ({ value: i.id, label: i.name }));
+    const r = await ui.form({
+      title: existing ? '編輯指標' : '新增指標',
+      allowDelete: !!existing,
+      fields: [
+        { name: 'name', label: '指標名稱', value: cur.name, required: true },
+        { name: 'kind', label: '類型', type: 'select', value: cur.kind || 'lag', row: true,
+          options: [{ value: 'lead', label: '領先：提早看出趨勢' }, { value: 'lag', label: '落後：最後的結果' }] },
+        { name: 'perspective', label: 'BSC 構面', type: 'select', value: cur.perspective || 'proc', row: true,
+          options: Object.keys(S.BSC).map(k => ({ value: k, label: S.BSC[k] })) },
+        { name: 'buId', label: '單位', type: 'select', value: cur.buId != null ? cur.buId : (d.buId || ''), row: true, options: S.unitOptions(true) },
+        { name: 'unit', label: '單位（%、件、天）', value: cur.unit, row: true },
+        { name: 'direction', label: '方向', type: 'select', value: cur.direction || 'up', row: true,
+          options: [{ value: 'up', label: '越高越好' }, { value: 'down', label: '越低越好' }] },
+        { name: 'target', label: '目標值', type: 'number', value: cur.target, row: true },
+        { name: 'warnPct', label: '黃燈容許差距（%）', type: 'number', value: cur.warnPct != null ? cur.warnPct : 10, row: true,
+          hint: '差距在這個範圍內是黃燈，超過是紅燈。目標是 0 的「越低越好」指標，這裡填可容許的數量。' },
+        { name: 'driverOf', label: '它會影響哪個指標', type: 'select', value: cur.driverOf || '',
+          options: [{ value: '', label: '無' }].concat(others), hint: '把領先指標連到它影響的落後指標，轉黃或轉紅時會提醒你。' },
+        { name: 'notes', label: '備註', type: 'textarea', value: cur.notes, placeholder: '資料從哪裡來、怎麼算' }
+      ]
+    });
+    if (!r) return null;
+    return finish('indicators', cur, r, '已新增指標');
+  }
+
+  async function indicatorValue(ind) {
+    const last = S.indicatorLatest(ind);
+    const r = await ui.form({
+      title: '記錄「' + ind.name + '」',
+      fields: [
+        { name: 'period', label: '日期', type: 'date', value: today(), row: true },
+        { name: 'value', label: '數值' + (ind.unit ? '（' + ind.unit + '）' : ''), type: 'number', value: last ? last.value : '', required: true, row: true }
+      ],
+      okText: '記錄'
+    });
+    if (!r || r.value == null) return null;
+    ind.values = (ind.values || []).filter(v => v.period !== r.period).concat([{ period: r.period, value: r.value }]);
+    S.save(); ui.toast('已記錄');
+    return ind;
+  }
+
+  async function win(existing) {
+    const cur = Object.assign({}, existing || {}, { __defaults: {} });
+    const r = await ui.form({
+      title: existing ? '編輯成果' : '記一筆成果',
+      allowDelete: !!existing,
+      fields: [
+        { name: 'title', label: '做了什麼', value: cur.title, required: true, placeholder: '例如：建立每月 KPI 燈號追蹤' },
+        { name: 'date', label: '日期', type: 'date', value: cur.date || today(), row: true },
+        { name: 'buId', label: '單位', type: 'select', value: cur.buId || '', row: true, options: S.unitOptions(true) },
+        { name: 'impact', label: '帶來什麼結果', type: 'textarea', value: cur.impact, placeholder: '盡量具體：省了多少時間、讓誰可以做什麼決定。不要寫公司機密數字。' },
+        { name: 'tags', label: '用到的能力（用逗號分隔）', value: (cur.tags || []).join('，'),
+          hint: '可用：' + S.COMPETENCIES.join('、') },
+        { name: 'english', label: '英文版一句話（選填）', type: 'textarea', value: cur.english, placeholder: 'Built a monthly KPI tracker that…' }
+      ]
+    });
+    if (!r) return null;
+    if (r !== 'delete') r.tags = r.tags.split(/[,，、]/).map(s => s.trim()).filter(Boolean);
+    return finish('wins', cur, r, '已記下成果');
+  }
+
+  return { bu, project, task, followup, routine, indicator, indicatorValue, win };
+})();
+
+</script>
+  <script>
+/* ---- js/parts.js ---- */
+/* Reusable row/card renderers and their click handling, shared by Today, unit pages and the list pages. */
+PMO.parts = (function () {
+  const S = PMO.store;
+  const { esc, fmtDate, today, addDays, daysBetween } = PMO.util;
+  const ui = PMO.ui;
+
+  const QUAD = {
+    do: { label: '立刻做', hint: '重要又緊急' },
+    plan: { label: '排時間做', hint: '重要、還不急' },
+    quick: { label: '快速處理或交辦', hint: '緊急、不那麼重要' },
+    later: { label: '之後再說', hint: '不急也不重要' }
+  };
+  const LIGHT = { ok: '達標', warn: '注意', bad: '偏離', none: '未設定' };
+
+  function unitTag(buId) {
+    const b = S.bu(buId);
+    if (!b) return '';
+    return `<span class="unit-tag"><span class="dot" style="background:${esc(b.color)}"></span>${esc(b.name)}</span>`;
+  }
+
+  function dueLabel(d, done) {
+    if (!d) return '<span class="date">無期限</span>';
+    const n = daysBetween(today(), d);
+    const txt = n === 0 ? '今天' : n === 1 ? '明天' : n === -1 ? '昨天' : n < 0 ? Math.abs(n) + ' 天前' : fmtDate(d).slice(5);
+    return `<span class="date ${!done && n < 0 ? 'over' : ''}">${txt}</span>`;
+  }
+
+  function taskRow(t, opts) {
+    const o = opts || {};
+    const done = t.status === 'done';
+    return `<li>
+      <input type="checkbox" class="check" data-act="task-toggle" data-id="${esc(t.id)}" ${done ? 'checked' : ''} aria-label="完成 ${esc(t.title)}">
+      ${dueLabel(t.due, done)}
+      <span class="grow ${done ? 'done-text' : ''}">${esc(t.title)}
+        <span class="row-meta">${o.hideUnit ? '' : unitTag(t.buId)}${t.importance === 'H' ? '<span class="pill H">重要</span>' : ''}${t.status === 'doing' ? '<span class="pill tag">進行中</span>' : ''}${o.showScore ? `<span class="small muted mono">分數 ${S.taskScore(t)}</span>` : ''}</span></span>
+      <button class="btn sm ghost" data-act="task-edit" data-id="${esc(t.id)}">${t.triaged === false ? '整理' : '編輯'}</button></li>`;
+  }
+
+  function followRow(f, opts) {
+    const o = opts || {};
+    const waitedDays = daysBetween(f.askedOn || today(), today());
+    const due = f.status === 'waiting' && f.nudgeOn && f.nudgeOn <= today();
+    return `<li>
+      <span class="date ${due ? 'over' : ''}">${f.status === 'done' ? '已收到' : due ? '該追了' : '追 ' + fmtDate(f.nudgeOn).slice(5)}</span>
+      <span class="grow ${f.status === 'done' ? 'done-text' : ''}">${esc(f.what)}
+        <span class="row-meta"><span class="small muted">${esc(f.who)}${f.channel ? '・' + esc(f.channel) : ''}・已等 ${waitedDays} 天</span>${o.hideUnit ? '' : unitTag(f.buId)}</span></span>
+      ${f.status === 'waiting' ? `<button class="btn sm" data-act="fu-done" data-id="${esc(f.id)}">收到了</button>
+      <button class="btn sm ghost" data-act="fu-snooze" data-id="${esc(f.id)}" title="提醒日往後延 3 天">+3 天</button>` : ''}
+      <button class="btn sm ghost" data-act="fu-edit" data-id="${esc(f.id)}">編輯</button></li>`;
+  }
+
+  function routineRow(r, opts) {
+    const o = opts || {};
+    const next = S.routineNext(r);
+    const due = next <= today();
+    const cad = { weekly: '每週', monthly: '每月', quarterly: '每季' }[r.cadence] || '';
+    return `<li>
+      <span class="date ${due ? 'over' : ''}">${due ? '該做了' : fmtDate(next).slice(5)}</span>
+      <span class="grow">${esc(r.title)}<span class="row-meta"><span class="small muted">${cad}${r.lastDone ? '・上次 ' + fmtDate(r.lastDone).slice(5) : '・還沒做過'}</span>${o.hideUnit ? '' : unitTag(r.buId)}</span></span>
+      <button class="btn sm ${due ? 'primary' : ''}" data-act="rt-done" data-id="${esc(r.id)}">完成這次</button>
+      <button class="btn sm ghost" data-act="rt-edit" data-id="${esc(r.id)}">編輯</button></li>`;
+  }
+
+  function sparkline(i) {
+    const vs = (i.values || []).slice().sort((a, b) => String(a.period).localeCompare(String(b.period))).slice(-12);
+    if (vs.length < 2) return '<div class="spark-empty small muted">記錄兩次以上會出現趨勢</div>';
+    const nums = vs.map(v => Number(v.value));
+    const tgt = i.target == null || i.target === '' ? null : Number(i.target);
+    const all = tgt == null ? nums : nums.concat([tgt]);
+    const min = Math.min.apply(null, all), max = Math.max.apply(null, all);
+    const span = max - min || 1;
+    const W = 160, H = 40, P = 4;
+    const x = k => P + k * (W - 2 * P) / (vs.length - 1);
+    const y = v => H - P - (v - min) / span * (H - 2 * P);
+    const pts = nums.map((v, k) => x(k).toFixed(1) + ',' + y(v).toFixed(1)).join(' ');
+    const last = nums[nums.length - 1];
+    return `<svg class="spark" viewBox="0 0 ${W} ${H}" role="img" aria-label="最近 ${vs.length} 次紀錄的趨勢">
+      ${tgt != null ? `<line x1="${P}" x2="${W - P}" y1="${y(tgt).toFixed(1)}" y2="${y(tgt).toFixed(1)}" class="spark-target"/>` : ''}
+      <polyline points="${pts}" class="spark-line" fill="none"/>
+      <circle cx="${x(nums.length - 1).toFixed(1)}" cy="${y(last).toFixed(1)}" r="3" class="spark-dot"/></svg>`;
+  }
+
+  function indicatorCard(i, opts) {
+    const o = opts || {};
+    const light = S.indicatorLight(i);
+    const last = S.indicatorLatest(i);
+    const trend = S.indicatorTrend(i);
+    const target = S.data.indicators.find(x => x.id === i.driverOf);
+    return `<div class="panel ind-card light-${light}">
+      <div class="ind-head">
+        <span class="pill ${i.kind === 'lead' ? 'lead' : 'lag'}">${i.kind === 'lead' ? '領先' : '落後'}</span>
+        <span class="small muted">${esc(S.BSC[i.perspective] || '')}</span>
+        <span class="light-pill ${light}">${LIGHT[light]}</span>
+      </div>
+      <h3>${esc(i.name)}</h3>
+      <div class="ind-value"><b>${last ? esc(last.value) : '—'}</b><span class="muted small">${esc(i.unit || '')}${i.target != null && i.target !== '' ? '・目標 ' + esc(i.target) + esc(i.unit || '') : ''}</span>
+        <span class="trend ${trend > 0 ? 'up' : trend < 0 ? 'down' : ''}" aria-label="${trend > 0 ? '變好' : trend < 0 ? '變差' : '持平'}">${trend > 0 ? '▲ 變好' : trend < 0 ? '▼ 變差' : '— 持平'}</span></div>
+      ${sparkline(i)}
+      <div class="row-meta">${o.hideUnit ? '' : unitTag(i.buId)}${target ? `<span class="small muted">影響 → ${esc(target.name)}</span>` : ''}${last ? `<span class="small muted">更新 ${fmtDate(last.period).slice(5)}</span>` : ''}</div>
+      <div class="actions"><button class="btn sm" data-act="ind-record" data-id="${esc(i.id)}">記錄新數值</button><button class="btn sm ghost" data-act="ind-edit" data-id="${esc(i.id)}">編輯</button></div>
+    </div>`;
+  }
+
+  /* Early warnings: a lead indicator off target, linked to a lag indicator. */
+  function warnings(scopeBuId) {
+    return S.data.indicators.filter(i => i.kind === 'lead' && (!scopeBuId || i.buId === scopeBuId))
+      .map(i => ({ i, light: S.indicatorLight(i), target: S.data.indicators.find(x => x.id === i.driverOf) }))
+      .filter(x => x.light === 'warn' || x.light === 'bad');
+  }
+
+  async function handle(e) {
+    const a = e.target.closest('[data-act]');
+    if (!a) return false;
+    const id = a.dataset.id;
+    const act = a.dataset.act;
+    const find = (list) => S.data[list].find(x => x.id === id);
+    switch (act) {
+      case 'task-toggle': {
+        const t = find('tasks'); if (!t) return true;
+        t.status = a.checked ? 'done' : 'todo'; t.doneOn = a.checked ? today() : '';
+        S.save(); if (a.checked) ui.toast('完成：' + t.title); break;
+      }
+      case 'task-edit': await PMO.edit.task(find('tasks')); break;
+      case 'fu-done': { const f = find('followups'); if (f) { f.status = 'done'; f.receivedOn = today(); S.save(); ui.toast('已收到：' + f.what); } break; }
+      case 'fu-snooze': { const f = find('followups'); if (f) { f.nudgeOn = addDays(today() > f.nudgeOn ? today() : f.nudgeOn, 3); S.save(); ui.toast('改成 ' + fmtDate(f.nudgeOn).slice(5) + ' 再提醒'); } break; }
+      case 'fu-edit': await PMO.edit.followup(find('followups')); break;
+      case 'rt-done': { const r = find('routines'); if (r) { r.lastDone = today(); S.save(); ui.toast('下次：' + fmtDate(S.routineNext(r)).slice(5)); } break; }
+      case 'rt-edit': await PMO.edit.routine(find('routines')); break;
+      case 'ind-record': { const i = find('indicators'); if (i) await PMO.edit.indicatorValue(i); break; }
+      case 'ind-edit': await PMO.edit.indicator(find('indicators')); break;
+      default: return false;
+    }
+    PMO.app.render();
+    return true;
+  }
+
+  return { QUAD, LIGHT, unitTag, dueLabel, taskRow, followRow, routineRow, indicatorCard, sparkline, warnings, handle };
+})();
+
+</script>
+  <script>
+/* ---- js/services/backup.js ---- */
+/* Backup, CSV and ICS export. */
+PMO.backup = (function () {
+  const { today, addDays, download } = PMO.util;
+  const S = PMO.store;
+
+  function exportJSON(includeSettings) {
+    const payload = {
+      app: 'strategy-pmo',
+      exportedAt: new Date().toISOString(),
+      data: S.data
+    };
+    if (includeSettings) {
+      // Secrets are stripped on purpose; you re-enter keys on the new device.
+      const s = Object.assign({}, S.settings, { claudeKey: '', openaiKey: '', gcalMap: S.settings.gcalMap, connectors: S.settings.connectors.map(c => Object.assign({}, c, { headers: '' })) });
+      payload.settings = s;
+    }
+    download('pmo-backup-' + today() + '.json', JSON.stringify(payload, null, 2), 'application/json');
+    S.data.meta.lastBackup = new Date().toISOString();
+    S.save();
+  }
+
+  function parseBackup(text) {
+    const obj = JSON.parse(text);
+    const data = obj && obj.data ? obj.data : obj;
+    if (!data || !Array.isArray(data.bus) || !Array.isArray(data.projects)) {
+      throw new Error('這個檔案不是本工具的備份格式（找不到 bus 與 projects）。');
+    }
+    return { data, settings: obj.settings || null };
+  }
+
+  // Merge keeps existing items and adds/overwrites by id.
+  function importData(parsed, mode) {
+    if (mode === 'replace') {
+      S.replaceAll(parsed.data);
+    } else {
+      const cur = S.data;
+      const inc = S.normalize(parsed.data);
+      ['bus', 'projects', 'tasks', 'followups', 'routines', 'indicators', 'wins', 'questions']
+        .forEach(k => inc[k].forEach(x => S.upsert(cur[k], x)));
+      Object.assign(cur.rituals.days, inc.rituals.days);
+      Object.assign(cur.rituals.weeks, inc.rituals.weeks);
+      S.save();
+    }
+    if (parsed.settings) {
+      const keep = { claudeKey: S.settings.claudeKey, openaiKey: S.settings.openaiKey };
+      Object.assign(S.settings, parsed.settings, keep);
+      S.saveSettings();
+    }
+  }
+
+  function csvCell(v) {
+    const s = String(v == null ? '' : v);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+  function toCSV(rows) { return '\ufeff' + rows.map(r => r.map(csvCell).join(',')).join('\r\n'); }
+
+  function exportCSV(kind) {
+    const rows = [];
+    if (kind === 'projects') {
+      rows.push(['事業單位', '專案', '狀態', '階段', '負責人', '開始', '到期', '進度%', '摘要']);
+      S.data.projects.forEach(p => {
+        const b = S.bu(p.buId);
+        rows.push([b ? b.name : '', p.name, S.STATUS[p.status] || p.status, p.stage, p.owner, p.start, p.due, S.progress(p), p.summary]);
+      });
+    } else if (kind === 'milestones') {
+      rows.push(['事業單位', '專案', '里程碑', '日期', '完成']);
+      S.allMilestones().forEach(({ m, p, b }) => rows.push([b ? b.name : '', p.name, m.title, m.date, m.done ? '是' : '否']));
+    } else if (kind === 'risks') {
+      rows.push(['事業單位', '專案', '風險', '等級', '對策', '狀態']);
+      S.data.projects.forEach(p => (p.risks || []).forEach(r => {
+        const b = S.bu(p.buId);
+        rows.push([b ? b.name : '', p.name, r.title, S.LEVEL[r.level] || r.level, r.mitigation, r.status === 'open' ? '未結案' : '已結案']);
+      }));
+    } else if (kind === 'kpis') {
+      rows.push(['事業單位', '專案', '指標', '期間', '目標', '實際', '單位']);
+      S.data.projects.forEach(p => (p.kpis || []).forEach(k => {
+        const b = S.bu(p.buId);
+        rows.push([b ? b.name : '', p.name, k.name, k.period, k.target, k.actual, k.unit]);
+      }));
+    }
+    else if (kind === 'tasks') {
+      rows.push(['單位', '任務', '截止日', '重要性', '力氣', '狀態', '優先分數', '完成日', '備註']);
+      S.data.tasks.forEach(t => rows.push([S.buName(t.buId), t.title, t.due, S.LEVEL[t.importance] || '', { S: '小', M: '中', L: '大' }[t.effort] || '',
+        { todo: '待辦', doing: '進行中', done: '完成' }[t.status] || t.status, S.taskScore(t), t.doneOn || '', t.notes]));
+    } else if (kind === 'followups') {
+      rows.push(['單位', '等什麼', '跟誰要', '管道', '提出日', '提醒日', '狀態', '收到日']);
+      S.data.followups.forEach(f => rows.push([S.buName(f.buId), f.what, f.who, f.channel, f.askedOn, f.nudgeOn, f.status === 'done' ? '已收到' : '等待中', f.receivedOn || '']));
+    } else if (kind === 'indicators') {
+      rows.push(['單位', '指標', '類型', 'BSC 構面', '方向', '目標', '單位', '日期', '數值']);
+      S.data.indicators.forEach(i => {
+        const base = [S.buName(i.buId), i.name, i.kind === 'lead' ? '領先' : '落後', S.BSC[i.perspective] || '', i.direction === 'down' ? '越低越好' : '越高越好', i.target, i.unit];
+        if (!i.values.length) rows.push(base.concat(['', '']));
+        i.values.forEach(v => rows.push(base.concat([v.period, v.value])));
+      });
+    } else if (kind === 'wins') {
+      rows.push(['日期', '單位', '成果', '結果', '能力', '英文']);
+      S.data.wins.forEach(w => rows.push([w.date, S.buName(w.buId), w.title, w.impact, (w.tags || []).join('、'), w.english]));
+    }
+    download('pmo-' + kind + '-' + today() + '.csv', toCSV(rows), 'text/csv;charset=utf-8');
+  }
+
+  function icsEscape(s) { return String(s || '').replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/,/g, '\\,').replace(/;/g, '\\;'); }
+  function icsDate(d) { return d.replace(/-/g, ''); }
+
+  function buildICS() {
+    const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//strategy-pmo//ZH-TW', 'CALSCALE:GREGORIAN', 'X-WR-CALNAME:策略 PMO'];
+    const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
+    S.allMilestones().forEach(({ m, p, b }) => {
+      if (!m.date) return;
+      lines.push('BEGIN:VEVENT', 'UID:' + m.id + '@strategy-pmo', 'DTSTAMP:' + stamp,
+        'DTSTART;VALUE=DATE:' + icsDate(m.date), 'DTEND;VALUE=DATE:' + icsDate(addDays(m.date, 1)),
+        'SUMMARY:' + icsEscape('[' + (b ? b.name : '') + '] ' + p.name + '｜' + m.title + (m.done ? '（已完成）' : '')),
+        'END:VEVENT');
+    });
+    lines.push('END:VCALENDAR');
+    return lines.join('\r\n');
+  }
+  function exportICS() { download('pmo-milestones-' + today() + '.ics', buildICS(), 'text/calendar'); }
+
+  function daysSinceBackup() {
+    const lb = S.data.meta.lastBackup;
+    if (!lb) return null;
+    return Math.floor((Date.now() - new Date(lb).getTime()) / 86400000);
+  }
+
+  return { exportJSON, parseBackup, importData, exportCSV, exportICS, daysSinceBackup };
+})();
+
+</script>
+  <script>
+/* ---- js/services/gcal.js ---- */
+/* Google Calendar sync via Google Identity Services (browser OAuth token flow) + Calendar REST API.
+   Needs an OAuth Client ID (Web application) whose Authorized JavaScript origin matches where you host this page.
+   Scope: calendar.events (read and write events; cannot delete calendars or change sharing). */
+PMO.gcal = (function () {
+  const S = PMO.store;
+  const { addDays, today } = PMO.util;
+  const SCOPE = 'https://www.googleapis.com/auth/calendar.events';
+  const API = 'https://www.googleapis.com/calendar/v3';
+  let token = null;
+  let tokenExpiry = 0;
+  let gisLoading = null;
+
+  function loadGIS() {
+    if (window.google && google.accounts && google.accounts.oauth2) return Promise.resolve();
+    if (gisLoading) return gisLoading;
+    gisLoading = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://accounts.google.com/gsi/client';
+      s.async = true;
+      s.onload = () => resolve();
+      s.onerror = () => { gisLoading = null; reject(new Error('無法載入 Google 登入元件，請確認網路連線。')); };
+      document.head.appendChild(s);
+    });
+    return gisLoading;
+  }
+
+  function connected() { return !!token && Date.now() < tokenExpiry; }
+
+  async function signIn() {
+    const clientId = S.settings.googleClientId;
+    if (!clientId) throw new Error('請先到「設定」填入 Google OAuth Client ID。');
+    if (location.protocol === 'file:') throw new Error('Google 登入需要用網址開啟（GitHub Pages 或本機伺服器），不能直接雙擊檔案。');
+    await loadGIS();
+    return new Promise((resolve, reject) => {
+      const client = google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: SCOPE,
+        callback: resp => {
+          if (resp.error) { reject(new Error('Google 授權失敗：' + resp.error)); return; }
+          token = resp.access_token;
+          tokenExpiry = Date.now() + (Number(resp.expires_in || 3600) - 60) * 1000;
+          resolve();
+        },
+        error_callback: err => reject(new Error('Google 授權視窗關閉或被擋：' + (err && err.type ? err.type : '未知原因')))
+      });
+      client.requestAccessToken({ prompt: token ? '' : 'consent' });
+    });
+  }
+
+  function signOut() {
+    if (token && window.google && google.accounts) google.accounts.oauth2.revoke(token, () => {});
+    token = null; tokenExpiry = 0;
+  }
+
+  async function call(method, path, body) {
+    if (!connected()) await signIn();
+    const res = await fetch(API + path, {
+      method,
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined
+    });
+    if (res.status === 204) return null;
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const err = new Error((json.error && json.error.message) || ('Google API 錯誤 ' + res.status));
+      err.status = res.status;
+      throw err;
+    }
+    return json;
+  }
+
+  function calId() { return encodeURIComponent(S.settings.gcalCalendarId || 'primary'); }
+
+  /* Everything that can go on the calendar, as all-day items: milestones, tasks with a due date, follow-ups to chase. */
+  function items(includeDone) {
+    const inc = S.settings.gcalInclude || {};
+    const out = [];
+    if (inc.milestones !== false) S.allMilestones().forEach(({ m, p, b }) => {
+      if (!m.date || (m.done && !includeDone)) return;
+      out.push({ id: m.id, date: m.date, done: m.done,
+        summary: '[' + (b ? b.name : 'PMO') + '] ' + p.name + '｜' + m.title, description: p.summary || '' });
+    });
+    if (inc.tasks !== false) S.data.tasks.forEach(t => {
+      if (!t.due || t.triaged === false || (t.status === 'done' && !includeDone)) return;
+      out.push({ id: t.id, date: t.due, done: t.status === 'done',
+        summary: '[任務' + (t.buId ? '・' + S.buName(t.buId) : '') + '] ' + t.title, description: t.notes || '' });
+    });
+    if (inc.followups !== false) S.data.followups.forEach(f => {
+      if (!f.nudgeOn || (f.status === 'done' && !includeDone)) return;
+      out.push({ id: f.id, date: f.nudgeOn, done: f.status === 'done',
+        summary: '[追回覆] ' + f.what + '（' + f.who + '）', description: f.notes || '' });
+    });
+    return out;
+  }
+
+  function eventFor(item) {
+    return {
+      summary: item.summary + (item.done ? ' ✓' : ''),
+      description: (item.description ? item.description + '\n\n' : '') + '由策略 PMO 工作台同步。',
+      start: { date: item.date },
+      end: { date: addDays(item.date, 1) },
+      colorId: item.done ? '8' : undefined,
+      extendedProperties: { private: { pmoId: item.id } }
+    };
+  }
+
+  /* Pushes items to the chosen calendar. Updates existing events, recreates any that were deleted on the calendar side. */
+  async function sync(options) {
+    const opts = Object.assign({ includeDone: false }, options || {});
+    const map = S.settings.gcalMap || (S.settings.gcalMap = {});
+    const list = items(opts.includeDone);
+    let created = 0, updated = 0, failed = 0;
+    for (const item of list) {
+      const body = eventFor(item);
+      const existing = map[item.id];
+      try {
+        if (existing) {
+          try {
+            await call('PATCH', '/calendars/' + calId() + '/events/' + encodeURIComponent(existing), body);
+            updated++;
+            continue;
+          } catch (e) {
+            if (e.status !== 404 && e.status !== 410) throw e;
+          }
+        }
+        const ev = await call('POST', '/calendars/' + calId() + '/events', body);
+        map[item.id] = ev.id;
+        created++;
+      } catch (e) {
+        console.error(e);
+        failed++;
+        if (e.status === 401 || e.status === 403) { S.saveSettings(); throw e; }
+      }
+    }
+    S.saveSettings();
+    return { created, updated, failed, total: list.length };
+  }
+
+  async function upcoming(days) {
+    const start = new Date(today() + 'T00:00:00');
+    const end = new Date(addDays(today(), days || 14) + 'T23:59:59');
+    const q = '?singleEvents=true&orderBy=startTime&maxResults=100&timeMin=' + encodeURIComponent(start.toISOString()) +
+      '&timeMax=' + encodeURIComponent(end.toISOString());
+    const res = await call('GET', '/calendars/' + calId() + '/events' + q);
+    return (res.items || []).map(e => ({
+      id: e.id,
+      title: e.summary || '（無標題）',
+      start: (e.start && (e.start.dateTime || e.start.date)) || '',
+      allDay: !!(e.start && e.start.date),
+      fromPmo: !!(e.extendedProperties && e.extendedProperties.private && e.extendedProperties.private.pmoId),
+      link: e.htmlLink
+    }));
+  }
+
+  return { signIn, signOut, connected, sync, items, upcoming };
+})();
+
+</script>
+  <script>
+/* ---- js/services/ai.js ---- */
+/* AI consultation. Two provider types:
+   - claude: Anthropic Messages API, called from the browser with your own key
+   - openai: any OpenAI-compatible chat completions endpoint (OpenAI, Azure OpenAI, Gemini's OpenAI endpoint, a company gateway, local Ollama)
+   Keys live only in this browser's localStorage. Anything you include as context is sent to the provider you choose. */
+PMO.ai = (function () {
+  const S = PMO.store;
+  const { today } = PMO.util;
+
+  const PRESETS = {
+    openai: { label: 'OpenAI', url: 'https://api.openai.com/v1/chat/completions', model: 'gpt-4o-mini', auth: 'bearer' },
+    gemini: { label: 'Google Gemini', url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', model: 'gemini-2.0-flash', auth: 'bearer' },
+    azure: { label: 'Azure OpenAI（公司端點）', url: 'https://你的資源.openai.azure.com/openai/deployments/你的部署名稱/chat/completions?api-version=2024-10-21', model: '', auth: 'api-key' },
+    ollama: { label: 'Ollama（本機）', url: 'http://localhost:11434/v1/chat/completions', model: 'llama3.1', auth: 'none' }
+  };
+
+  const BASE_SYSTEM = [
+    '你是一位策略 PMO 顧問，協助一位在公司策略部門擔任多個單位窗口的使用者。',
+    '她的工作是追蹤各單位的進度與指標、整理資料、協調資源、排優先順序，並把重點往上報告。',
+    '回答原則：使用繁體中文；先講結論，再給理由與具體下一步；條列簡短；不確定的地方直接說。',
+    '溝通建議要符合她正在練習的方向：先聽再說、力道從輕開始、公開場合以肯定和提問為主、不同意見私下講。',
+    '協調資源時，提醒她窗口的角色是整理需求與數據、交給主管決策，不對單位承諾資源。',
+    '不要假裝知道公司內部數字；需要資料時，請她說明能提供什麼，或建議她該找哪些資料。'
+  ].join('\n');
+
+  function providerLabel() {
+    const s = S.settings;
+    if (s.aiProvider === 'claude') return 'Claude（' + (s.claudeModel || '') + '）';
+    return (s.openaiModel || 'OpenAI 相容') + '・' + (safeHost(s.openaiUrl) || '未設定網址');
+  }
+  function safeHost(u) { try { return new URL(u).host; } catch (e) { return ''; } }
+  function ready() {
+    const s = S.settings;
+    if (s.aiProvider === 'claude') return !!s.claudeKey;
+    return !!s.openaiUrl && (s.openaiAuth === 'none' || !!s.openaiKey);
+  }
+
+  function snapshot(scope) {
+    const d = S.data;
+    const inScope = x => scope === 'all' || (x.buId || '') === scope;
+    const lines = ['今天：' + today()];
+    const units = scope === 'all' ? S.activeBus() : [S.bu(scope)].filter(Boolean);
+    units.forEach(b => {
+      lines.push('\n## ' + b.name + '（' + (S.UNIT_TYPE[b.type] || '') + '）' + (b.notes ? '：' + b.notes : ''));
+      d.projects.filter(p => p.buId === b.id && p.status !== 'done').forEach(p => {
+        lines.push('- 專案：' + p.name + '｜' + (S.STATUS[p.status] || p.status) + '｜階段：' + (p.stage || '—') + '｜到期：' + (p.due || '—') + '｜進度 ' + S.progress(p) + '%');
+        p.milestones.filter(m => !m.done).slice(0, 4).forEach(m => lines.push('  未完成里程碑：' + m.date + ' ' + m.title));
+        p.risks.filter(r => r.status === 'open').forEach(r => lines.push('  風險（' + (S.LEVEL[r.level] || r.level) + '）：' + r.title));
+      });
+    });
+    const tasks = d.tasks.filter(t => t.status !== 'done' && inScope(t)).sort((a, b) => S.taskScore(b) - S.taskScore(a)).slice(0, 15);
+    if (tasks.length) { lines.push('\n## 待辦（依優先分數）'); tasks.forEach(t => lines.push('- ' + t.title + '｜' + S.buName(t.buId) + '｜截止 ' + (t.due || '無') + '｜重要性 ' + (S.LEVEL[t.importance] || '未定'))); }
+    const fus = d.followups.filter(f => f.status === 'waiting' && inScope(f));
+    if (fus.length) { lines.push('\n## 等待回覆'); fus.forEach(f => lines.push('- ' + f.what + '｜向 ' + f.who + '｜提出 ' + f.askedOn + '｜預計追 ' + f.nudgeOn)); }
+    const inds = d.indicators.filter(inScope);
+    if (inds.length) {
+      lines.push('\n## 指標');
+      inds.forEach(i => { const l = S.indicatorLatest(i); lines.push('- ' + i.name + '（' + (i.kind === 'lead' ? '領先' : '落後') + '）｜最新 ' + (l ? l.value : '—') + (i.unit || '') + '｜目標 ' + (i.target ?? '—') + '｜燈號 ' + PMO.parts.LIGHT[S.indicatorLight(i)]); });
+    }
+    const parked = d.questions.filter(q => q.status === 'parked' && inScope(q));
+    if (parked.length) { lines.push('\n## 待問主管'); parked.forEach(q => lines.push('- ' + q.text)); }
+    return lines.join('\n');
+  }
+
+  function systemPrompt(context) {
+    let system = BASE_SYSTEM;
+    if (S.settings.aiSystemNote) system += '\n\n使用者補充：' + S.settings.aiSystemNote;
+    if (context) system += '\n\n以下是她工作台裡目前的資料（僅供參考）：\n' + context;
+    return system;
+  }
+
+  async function askClaude(messages, system) {
+    const s = S.settings;
+    if (!s.claudeKey) throw new Error('請先到「設定」填入 Claude API key。');
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': s.claudeKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({ model: s.claudeModel || 'claude-sonnet-5-5', max_tokens: 1500, system, messages })
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error('Claude API 錯誤：' + ((json.error && json.error.message) || 'HTTP ' + res.status));
+    return (json.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n').trim();
+  }
+
+  async function askOpenAI(messages, system) {
+    const s = S.settings;
+    if (!s.openaiUrl) throw new Error('請先到「設定」填入 AI 服務的端點網址。');
+    const headers = { 'Content-Type': 'application/json' };
+    if (s.openaiAuth === 'bearer') headers.Authorization = 'Bearer ' + s.openaiKey;
+    if (s.openaiAuth === 'api-key') headers['api-key'] = s.openaiKey;
+    const body = { messages: [{ role: 'system', content: system }].concat(messages), max_tokens: 1500 };
+    if (s.openaiModel) body.model = s.openaiModel;
+    let res;
+    try {
+      res = await fetch(s.openaiUrl, { method: 'POST', headers, body: JSON.stringify(body) });
+    } catch (e) {
+      throw new Error('連不到 AI 服務。常見原因：網址錯誤、服務不允許從瀏覽器呼叫（CORS），或需要公司內網。');
+    }
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error('AI 服務錯誤：' + ((json.error && (json.error.message || json.error)) || 'HTTP ' + res.status));
+    const choice = json.choices && json.choices[0];
+    const content = choice && choice.message && choice.message.content;
+    if (Array.isArray(content)) return content.map(c => c.text || '').join('\n').trim();
+    return String(content || '').trim();
+  }
+
+  async function ask(messages, opts) {
+    const system = systemPrompt(opts && opts.context);
+    const msgs = messages.map(m => ({ role: m.role, content: m.content }));
+    return S.settings.aiProvider === 'claude' ? askClaude(msgs, system) : askOpenAI(msgs, system);
+  }
+
+  return { ask, snapshot, PRESETS, providerLabel, ready };
+})();
+
+</script>
+  <script>
+/* ---- js/services/connectors.js ---- */
+/* Generic API connectors: save an endpoint, call it, preview the JSON, or push a backup to a webhook.
+   Calls go straight from the browser, so the target API must allow CORS from your page's origin. */
+PMO.connectors = (function () {
+  const S = PMO.store;
+
+  function list() { return S.settings.connectors || (S.settings.connectors = []); }
+
+  function parseHeaders(text) {
+    if (!text || !text.trim()) return {};
+    try {
+      const h = JSON.parse(text);
+      if (typeof h !== 'object' || Array.isArray(h)) throw new Error();
+      return h;
+    } catch (e) {
+      throw new Error('Headers 要是 JSON 物件，例如 {"Authorization": "Bearer xxx"}');
+    }
+  }
+
+  async function run(c, overrideBody) {
+    const headers = parseHeaders(c.headers);
+    const init = { method: c.method || 'GET', headers };
+    const body = overrideBody !== undefined ? overrideBody : c.body;
+    if (init.method !== 'GET' && init.method !== 'HEAD' && body) {
+      init.body = typeof body === 'string' ? body : JSON.stringify(body);
+      if (!Object.keys(headers).some(k => k.toLowerCase() === 'content-type')) headers['Content-Type'] = 'application/json';
+    }
+    const started = performance.now();
+    let res;
+    try {
+      res = await fetch(c.url, init);
+    } catch (e) {
+      throw new Error('連不到這個網址。常見原因：對方沒有開放 CORS、網址錯誤，或需要公司內網。');
+    }
+    const ms = Math.round(performance.now() - started);
+    const text = await res.text();
+    let parsed = null;
+    try { parsed = JSON.parse(text); } catch (_) { parsed = null; }
+    return { ok: res.ok, status: res.status, ms, text, json: parsed };
+  }
+
+  async function pushBackup(c) {
+    const payload = { app: 'strategy-pmo', exportedAt: new Date().toISOString(), data: S.data };
+    return run(Object.assign({}, c, { method: c.method === 'GET' ? 'POST' : c.method }), JSON.stringify(payload));
+  }
+
+  return { list, run, pushBackup };
+})();
+
+</script>
+  <script>
+/* ---- js/services/notify.js ---- */
+/* Browser reminders while the page is open: tasks due today or overdue, follow-ups to chase, routines due.
+   Each item notifies at most once per day. Nothing runs when the tab is closed. */
+PMO.notify = (function () {
+  const S = PMO.store;
+  const { today } = PMO.util;
+  const SEEN_KEY = 'pmo.notified';
+  let timer = null;
+
+  function supported() { return 'Notification' in window; }
+  function permission() { return supported() ? Notification.permission : 'unsupported'; }
+
+  async function enable() {
+    if (!supported()) throw new Error('這個瀏覽器不支援通知。');
+    const p = await Notification.requestPermission();
+    if (p !== 'granted') throw new Error('瀏覽器沒有允許通知，可以在網址列左邊的網站設定裡開啟。');
+    S.settings.notify = true; S.saveSettings();
+    start(); check();
+  }
+  function disable() { S.settings.notify = false; S.saveSettings(); stop(); }
+
+  function seen() {
+    try { const s = JSON.parse(localStorage.getItem(SEEN_KEY) || '{}'); return s.day === today() ? s : { day: today(), ids: [] }; }
+    catch (e) { return { day: today(), ids: [] }; }
+  }
+  function markSeen(s) { try { localStorage.setItem(SEEN_KEY, JSON.stringify(s)); } catch (e) { /* ignore */ } }
+
+  function dueItems() {
+    const t = today();
+    const d = S.data;
+    const out = [];
+    d.tasks.filter(x => x.status !== 'done' && x.triaged !== false && x.due && x.due <= t)
+      .forEach(x => out.push({ id: 't:' + x.id, title: x.due < t ? '逾期任務' : '今天到期', body: x.title, hash: '#/tasks' }));
+    d.followups.filter(f => f.status === 'waiting' && f.nudgeOn && f.nudgeOn <= t)
+      .forEach(f => out.push({ id: 'f:' + f.id, title: '該追回覆了', body: f.what + '（' + f.who + '）', hash: '#/followups' }));
+    d.routines.filter(r => S.routineNext(r) <= t)
+      .forEach(r => out.push({ id: 'r:' + r.id, title: '例行事項', body: r.title, hash: '#/routines' }));
+    return out;
+  }
+
+  function check() {
+    if (!S.settings.notify || permission() !== 'granted') return;
+    const s = seen();
+    const fresh = dueItems().filter(i => !s.ids.includes(i.id));
+    if (!fresh.length) return;
+    if (fresh.length > 3) {
+      show({ title: '策略 PMO：今天有 ' + fresh.length + ' 件事要處理', body: fresh.slice(0, 3).map(i => i.body).join('、') + '…', hash: '#/today' });
+    } else fresh.forEach(show);
+    s.ids = s.ids.concat(fresh.map(i => i.id));
+    markSeen(s);
+  }
+
+  function show(i) {
+    try {
+      const n = new Notification(i.title, { body: i.body, tag: i.id || 'pmo-summary' });
+      n.onclick = () => { window.focus(); location.hash = i.hash; n.close(); };
+    } catch (e) { /* some browsers only allow notifications from a service worker */ }
+  }
+
+  function start() {
+    stop();
+    if (!S.settings.notify) return;
+    setTimeout(check, 1500);
+    timer = setInterval(check, 5 * 60 * 1000);
+  }
+  function stop() { if (timer) clearInterval(timer); timer = null; }
+
+  return { supported, permission, enable, disable, start, check, dueItems };
+})();
+
+</script>
+  <script>
+/* ---- js/views/today.js ---- */
+/* 今天：quick capture, top three, everything due, follow-ups to chase, routines and early warnings. */
+PMO.views = PMO.views || {};
+
+PMO.views.today = (function () {
+  const S = PMO.store;
+  const P = PMO.parts;
+  const { esc, fmtDate, today, addDays, uid } = PMO.util;
+  const ui = PMO.ui;
+  let captureKind = 'task';
+
+  const KINDS = [
+    { v: 'task', l: '任務' },
+    { v: 'idea', l: '想法，之後整理' },
+    { v: 'follow', l: '等待回覆' },
+    { v: 'question', l: '想問主管' }
+  ];
+
+  function render() {
+    const t = today();
+    const d = S.data;
+    const open = d.tasks.filter(x => x.status !== 'done' && x.triaged !== false);
+    const top3 = open.slice().sort((a, b) => S.taskScore(b) - S.taskScore(a)).slice(0, 3);
+    const topIds = top3.map(x => x.id);
+    const dueNow = open.filter(x => x.due && x.due <= t && !topIds.includes(x.id)).sort((a, b) => a.due.localeCompare(b.due));
+    const inbox = d.tasks.filter(x => x.triaged === false && x.status !== 'done');
+    const chase = d.followups.filter(f => f.status === 'waiting' && f.nudgeOn && f.nudgeOn <= t);
+    const routines = d.routines.filter(r => S.routineNext(r) <= t);
+    const warns = P.warnings();
+    const ms = S.allMilestones().filter(x => !x.m.done && x.m.date && x.m.date <= addDays(t, 3));
+    const doneToday = d.tasks.filter(x => x.status === 'done' && x.doneOn === t).length;
+    const ritual = (d.rituals.days[t] && d.rituals.days[t].checks) || {};
+    const ritualDone = ['c1', 'c2', 'c3'].filter(k => ritual[k]).length;
+    const weekday = '日一二三四五六'[new Date().getDay()];
+
+    const html = `
+      <div class="page-head"><div><h1>今天</h1><p>${fmtDate(t)}（週${weekday}）・今天完成 ${doneToday} 件</p></div></div>
+
+      <section class="panel capture">
+        <form id="capture-form" class="capture-form">
+          <label for="cap-text" class="sr-only">快速記錄</label>
+          <input type="text" id="cap-text" placeholder="想到什麼先記下來，按 Enter 存" autocomplete="off">
+          <select id="cap-kind" aria-label="類型">${KINDS.map(k => `<option value="${k.v}" ${k.v === captureKind ? 'selected' : ''}>${k.l}</option>`).join('')}</select>
+          <select id="cap-unit" aria-label="單位">${S.unitOptions(true).map(o => `<option value="${esc(o.value)}">${esc(o.label)}</option>`).join('')}</select>
+          <button class="btn primary" type="submit">記下</button>
+        </form>
+      </section>
+
+      ${d.meta.isSample ? `<div class="notice"><b>這是範例資料。</b> 單位、任務都可以直接改或刪除；到「備份與匯出」可以清空重來。公司機密請不要記在這裡。 <button class="btn sm" data-act="dismiss-sample">知道了</button></div>` : ''}
+
+      <div class="grid-2">
+        <section class="panel focus-panel">
+          <div class="panel-head"><h2>今天先做這三件</h2><a class="small" href="#/tasks">全部任務 →</a></div>
+          ${top3.length ? `<ul class="list">${top3.map(x => P.taskRow(x)).join('')}</ul>` : '<p class="empty">沒有待辦，記一件吧。</p>'}
+          <p class="hint">依重要性、截止日和花的力氣自動排序。順序不對的話，改任務的重要性或截止日就好。</p>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h2>該追的回覆</h2><a class="small" href="#/followups">全部 →</a></div>
+          ${chase.length ? `<ul class="list">${chase.map(f => P.followRow(f)).join('')}</ul>` : '<p class="empty">沒有需要今天追的。</p>'}
+        </section>
+      </div>
+
+      ${dueNow.length || ms.length ? `<section class="panel">
+        <div class="panel-head"><h2>到期與逾期</h2></div>
+        <ul class="list">${dueNow.map(x => P.taskRow(x)).join('')}
+        ${ms.map(x => `<li><span class="date ${x.m.date < t ? 'over' : ''}">${fmtDate(x.m.date).slice(5)}</span>
+          <span class="grow">${esc(x.m.title)}<span class="row-meta"><span class="pill tag">里程碑</span><a class="small" href="#/project/${esc(x.p.id)}">${esc(x.p.name)}</a></span></span></li>`).join('')}</ul>
+      </section>` : ''}
+
+      <div class="grid-2">
+        <section class="panel">
+          <div class="panel-head"><h2>收件匣（${inbox.length}）</h2></div>
+          ${inbox.length ? `<ul class="list">${inbox.map(x => P.taskRow(x)).join('')}</ul>` : '<p class="empty">都整理好了。</p>'}
+          <p class="hint">記成「想法」的會先放這裡，有空時按「整理」補上截止日和重要性。</p>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h2>例行事項</h2><a class="small" href="#/routines">全部 →</a></div>
+          ${routines.length ? `<ul class="list">${routines.map(r => P.routineRow(r)).join('')}</ul>` : '<p class="empty">今天沒有到期的例行事項。</p>'}
+        </section>
+      </div>
+
+      <div class="grid-2">
+        <section class="panel">
+          <div class="panel-head"><h2>指標預警</h2><a class="small" href="#/indicators">全部指標 →</a></div>
+          ${warns.length ? `<ul class="list">${warns.map(w => `<li><span class="light-pill ${w.light}">${P.LIGHT[w.light]}</span>
+            <span class="grow">${esc(w.i.name)}${w.target ? `<span class="row-meta"><span class="small muted">可能影響：${esc(w.target.name)}</span></span>` : ''}</span></li>`).join('')}</ul>`
+            : '<p class="empty">領先指標都在目標範圍內。</p>'}
+        </section>
+        <section class="panel ritual-focus">
+          <div class="panel-head"><h2>今天的慢半拍</h2><a class="small" href="#/rituals">打開 →</a></div>
+          <p style="margin:0">今天完成 <b>${ritualDone} / 3</b>：開口前三題、兩秒停頓、睡前三行。</p>
+          <p class="quote" style="margin:8px 0 0">先停兩秒，再決定怎麼說。</p>
+        </section>
+      </div>`;
+    return { title: '今天', html };
+  }
+
+  function capture(text, kind, buId) {
+    const t = today();
+    if (kind === 'task') S.data.tasks.push({ id: uid('t'), title: text, buId, due: t, importance: 'M', effort: 'M', status: 'todo', triaged: true, notes: '', created: t });
+    if (kind === 'idea') S.data.tasks.push({ id: uid('t'), title: text, buId, due: '', importance: '', effort: '', status: 'todo', triaged: false, notes: '', created: t });
+    if (kind === 'follow') S.data.followups.push({ id: uid('f'), what: text, who: '（待補）', buId, channel: '', askedOn: t, nudgeOn: addDays(t, 3), status: 'waiting', notes: '' });
+    if (kind === 'question') S.data.questions.push({ id: uid('q'), text, buId, status: 'parked', created: t, answer: '' });
+    S.save();
+    ui.toast({ task: '已加入今天的任務', idea: '已放進收件匣', follow: '已加入等待回覆，3 天後提醒', question: '已記到問題清單' }[kind]);
+  }
+
+  function mount(root) {
+    const form = root.querySelector('#capture-form');
+    root.querySelector('#cap-kind').onchange = e => { captureKind = e.target.value; };
+    form.onsubmit = e => {
+      e.preventDefault();
+      const text = root.querySelector('#cap-text').value.trim();
+      if (!text) { root.querySelector('#cap-text').focus(); return; }
+      capture(text, root.querySelector('#cap-kind').value, root.querySelector('#cap-unit').value);
+      PMO.app.render();
+      const again = document.getElementById('cap-text');
+      if (again) again.focus();
+    };
+    root.onclick = async e => {
+      if (await P.handle(e)) return;
+      const a = e.target.closest('[data-act="dismiss-sample"]');
+      if (a) { S.data.meta.isSample = false; S.save(); PMO.app.render(); }
+    };
+  }
+
+  return { render, mount };
+})();
+
+</script>
+  <script>
+/* ---- js/views/dashboard.js ---- */
+/* 總覽：every active unit at a glance — tasks, follow-ups, projects and indicator lights. */
+PMO.views = PMO.views || {};
+
+PMO.views.dashboard = (function () {
+  const S = PMO.store;
+  const P = PMO.parts;
+  const { esc, fmtDate, today, addDays } = PMO.util;
+
+  function render() {
+    const d = S.data;
+    const t = today();
+    const openTasks = d.tasks.filter(x => x.status !== 'done' && x.triaged !== false);
+    const overdue = openTasks.filter(x => x.due && x.due < t).length + S.allMilestones().filter(x => !x.m.done && x.m.date && x.m.date < t).length;
+    const waiting = d.followups.filter(f => f.status === 'waiting');
+    const lights = { ok: 0, warn: 0, bad: 0 };
+    d.indicators.forEach(i => { const l = S.indicatorLight(i); if (lights[l] != null) lights[l]++; });
+    const upcoming = S.allMilestones().filter(x => !x.m.done && x.m.date >= t && x.m.date <= addDays(t, 14));
+
+    const unitCard = b => {
+      const tk = openTasks.filter(x => x.buId === b.id);
+      const fu = waiting.filter(f => f.buId === b.id);
+      const ps = S.projectsOf(b.id).filter(p => p.status !== 'done');
+      const inds = d.indicators.filter(i => i.buId === b.id);
+      const worst = inds.reduce((w, i) => { const l = S.indicatorLight(i); return l === 'bad' ? 'bad' : l === 'warn' && w !== 'bad' ? 'warn' : w; }, inds.length ? 'ok' : 'none');
+      return `<a class="panel bu-card" style="--c:${esc(b.color)}" href="#/bu/${esc(b.id)}">
+        <div class="ind-head"><h3 style="margin:0">${esc(b.name)}</h3><span class="small muted">${esc(S.UNIT_TYPE[b.type] || '')}</span></div>
+        <div class="mini-stats">
+          <span><b>${tk.length}</b> 待辦</span><span><b>${fu.length}</b> 等回覆</span><span><b>${ps.length}</b> 專案</span>
+          ${inds.length ? `<span class="light-pill ${worst}">${P.LIGHT[worst]}</span>` : ''}
+        </div>
+        ${ps.some(p => p.status === 'risk' || p.status === 'off') ? '<span class="pill risk">有專案需要注意</span>' : ''}
+      </a>`;
+    };
+
+    const html = `
+      <div class="page-head">
+        <div><h1>總覽</h1><p>${fmtDate(t)}・負責 ${S.activeBus().length} 個單位</p></div>
+        <div class="actions"><button class="btn" data-act="new-bu">＋ 新增單位</button></div>
+      </div>
+      <div class="panel stat-row">
+        <div class="stat"><b>${openTasks.length}</b><span>待辦任務</span></div>
+        <div class="stat"><b style="color:${overdue ? 'var(--bad)' : 'inherit'}">${overdue}</b><span>逾期</span></div>
+        <div class="stat"><b>${waiting.length}</b><span>等待回覆</span></div>
+        <div class="stat"><b class="c-ok">${lights.ok}</b><span>指標達標</span></div>
+        <div class="stat"><b class="c-warn">${lights.warn}</b><span>注意</span></div>
+        <div class="stat"><b class="c-bad">${lights.bad}</b><span>偏離</span></div>
+      </div>
+      <div class="grid">${S.activeBus().map(unitCard).join('') || '<p class="empty">還沒有單位，先新增一個。</p>'}</div>
+      <section class="panel"><div class="panel-head"><h2>接下來 14 天的里程碑</h2><a class="small" href="#/calendar">同步到日曆 →</a></div>
+        ${upcoming.length ? `<ul class="list">${upcoming.map(x => `<li><span class="date">${fmtDate(x.m.date).slice(5)}</span>
+          <span class="grow">${esc(x.m.title)}<span class="row-meta">${P.unitTag(x.p.buId)}<a class="small" href="#/project/${esc(x.p.id)}">${esc(x.p.name)}</a></span></span></li>`).join('')}</ul>`
+          : '<p class="empty">兩週內沒有里程碑。</p>'}</section>
+      ${d.bus.some(b => b.archived) ? `<p class="small muted">已停用的單位：${d.bus.filter(b => b.archived).map(b => `<a href="#/bu/${esc(b.id)}">${esc(b.name)}</a>`).join('、')}</p>` : ''}`;
+    return { title: '總覽', html };
+  }
+
+  function mount(root) {
+    root.onclick = async e => {
+      const a = e.target.closest('[data-act="new-bu"]');
+      if (a) { const b = await PMO.edit.bu(); if (b) location.hash = '#/bu/' + b.id; }
+    };
+  }
+
+  return { render, mount };
+})();
+
+</script>
+  <script>
+/* ---- js/views/tasks.js ---- */
+/* Tasks: priority matrix (important × urgent) or a scored list, filterable by unit. */
+PMO.views = PMO.views || {};
+
+PMO.views.tasks = (function () {
+  const S = PMO.store;
+  const P = PMO.parts;
+  const { esc } = PMO.util;
+  let mode = 'matrix';
+  let unit = '';
+  let showDone = false;
+
+  function render() {
+    const all = S.data.tasks.filter(t => (!unit || t.buId === unit) && t.triaged !== false);
+    const open = all.filter(t => t.status !== 'done');
+    const done = all.filter(t => t.status === 'done').sort((a, b) => String(b.doneOn).localeCompare(String(a.doneOn))).slice(0, 30);
+    const inbox = S.data.tasks.filter(t => t.triaged === false && t.status !== 'done' && (!unit || t.buId === unit));
+    const byScore = open.slice().sort((a, b) => S.taskScore(b) - S.taskScore(a));
+
+    const matrix = ['do', 'plan', 'quick', 'later'].map(q => {
+      const items = byScore.filter(t => S.quadrant(t) === q);
+      return `<section class="panel quad quad-${q}">
+        <div class="panel-head"><h2>${P.QUAD[q].label}<span class="small muted">　${P.QUAD[q].hint}</span></h2><span class="small muted">${items.length}</span></div>
+        ${items.length ? `<ul class="list">${items.map(t => P.taskRow(t)).join('')}</ul>` : '<p class="empty">沒有。</p>'}</section>`;
+    }).join('');
+
+    const list = `<section class="panel"><div class="panel-head"><h2>依優先分數排序</h2></div>
+      ${byScore.length ? `<ul class="list">${byScore.map(t => P.taskRow(t, { showScore: true })).join('')}</ul>` : '<p class="empty">沒有待辦。</p>'}
+      <p class="hint">分數 = 重要性 × 3 ＋ 緊急程度 × 2 ＋ 力氣（小 +1、大 −1）。逾期最緊急，兩天內到期次之。</p></section>`;
+
+    const html = `
+      <div class="page-head"><div><h1>任務</h1><p>${open.length} 件待辦${inbox.length ? '・收件匣還有 ' + inbox.length + ' 則待整理' : ''}</p></div>
+        <div class="actions"><button class="btn primary" data-act="new">＋ 新增任務</button></div></div>
+      <div class="toolbar">
+        <div class="seg" role="group" aria-label="檢視方式">
+          <button class="${mode === 'matrix' ? 'on' : ''}" data-act="mode" data-v="matrix">重要／緊急矩陣</button>
+          <button class="${mode === 'list' ? 'on' : ''}" data-act="mode" data-v="list">分數排序</button>
+        </div>
+        <select id="task-unit" aria-label="篩選單位"><option value="">全部單位</option>${S.data.bus.map(b => `<option value="${esc(b.id)}" ${b.id === unit ? 'selected' : ''}>${esc(b.name)}${b.archived ? '（停用）' : ''}</option>`).join('')}</select>
+        <label class="small"><input type="checkbox" id="show-done" ${showDone ? 'checked' : ''}> 顯示已完成</label>
+      </div>
+      ${inbox.length ? `<section class="panel"><div class="panel-head"><h2>收件匣</h2></div><ul class="list">${inbox.map(t => P.taskRow(t)).join('')}</ul></section>` : ''}
+      ${mode === 'matrix' ? `<div class="quad-grid">${matrix}</div>` : list}
+      ${showDone ? `<section class="panel"><div class="panel-head"><h2>最近完成</h2></div>${done.length ? `<ul class="list">${done.map(t => P.taskRow(t)).join('')}</ul>` : '<p class="empty">還沒有。</p>'}</section>` : ''}`;
+    return { title: '任務', html };
+  }
+
+  function mount(root) {
+    root.querySelector('#task-unit').onchange = e => { unit = e.target.value; PMO.app.render(); };
+    root.querySelector('#show-done').onchange = e => { showDone = e.target.checked; PMO.app.render(); };
+    root.onclick = async e => {
+      if (await P.handle(e)) return;
+      const a = e.target.closest('[data-act]');
+      if (!a) return;
+      if (a.dataset.act === 'mode') { mode = a.dataset.v; PMO.app.render(); }
+      if (a.dataset.act === 'new') { await PMO.edit.task(null, { buId: unit }); PMO.app.render(); }
+    };
+  }
+
+  return { render, mount };
+})();
+
+</script>
+  <script>
+/* ---- js/views/followups.js ---- */
+/* 等待回覆：things you asked others for, with a nudge date. */
+PMO.views = PMO.views || {};
+
+PMO.views.followups = (function () {
+  const S = PMO.store;
+  const P = PMO.parts;
+  const { today } = PMO.util;
+
+  function render() {
+    const t = today();
+    const waiting = S.data.followups.filter(f => f.status === 'waiting').sort((a, b) => String(a.nudgeOn).localeCompare(String(b.nudgeOn)));
+    const due = waiting.filter(f => f.nudgeOn && f.nudgeOn <= t);
+    const later = waiting.filter(f => !(f.nudgeOn && f.nudgeOn <= t));
+    const done = S.data.followups.filter(f => f.status === 'done').sort((a, b) => String(b.receivedOn || '').localeCompare(String(a.receivedOn || ''))).slice(0, 20);
+    const html = `
+      <div class="page-head"><div><h1>等待回覆</h1><p>跟別人要的資料或答覆，記下來、到期提醒你追，不用全部放在腦袋裡。</p></div>
+        <div class="actions"><button class="btn primary" data-act="new">＋ 新增</button></div></div>
+      <section class="panel"><div class="panel-head"><h2>該追了（${due.length}）</h2></div>
+        ${due.length ? `<ul class="list">${due.map(f => P.followRow(f)).join('')}</ul>` : '<p class="empty">沒有到期的。</p>'}
+        <p class="hint">追的時候可以這樣開口：「想確認一下上次提到的＿＿，大概什麼時候方便給我？我這邊是要用在＿＿。」先說用途，對方比較願意優先處理。</p></section>
+      <section class="panel"><div class="panel-head"><h2>還在等（${later.length}）</h2></div>
+        ${later.length ? `<ul class="list">${later.map(f => P.followRow(f)).join('')}</ul>` : '<p class="empty">沒有。</p>'}</section>
+      <section class="panel"><div class="panel-head"><h2>最近收到</h2></div>
+        ${done.length ? `<ul class="list">${done.map(f => P.followRow(f)).join('')}</ul>` : '<p class="empty">還沒有。</p>'}</section>`;
+    return { title: '等待回覆', html };
+  }
+
+  function mount(root) {
+    root.onclick = async e => {
+      if (await P.handle(e)) return;
+      if (e.target.closest('[data-act="new"]')) { await PMO.edit.followup(null); PMO.app.render(); }
+    };
+  }
+
+  return { render, mount };
+})();
+
+</script>
+  <script>
+/* ---- js/views/routines.js ---- */
+/* 例行事項：weekly / monthly / quarterly checklists. */
+PMO.views = PMO.views || {};
+
+PMO.views.routines = (function () {
+  const S = PMO.store;
+  const P = PMO.parts;
+  const { today } = PMO.util;
+
+  const IDEAS = [
+    '每月：月結後確認財務月報是否更新',
+    '每月：更新各單位 KPI 燈號，挑三個變化寫給主管',
+    '每週：檢查等待回覆清單，該追的都追',
+    '每週五：寫下本週完成的事和下週三件重點',
+    '每季：整理成果紀錄（中英文各一句），準備代表作'
+  ];
+
+  function render() {
+    const t = today();
+    const list = S.data.routines.slice().sort((a, b) => S.routineNext(a).localeCompare(S.routineNext(b)));
+    const due = list.filter(r => S.routineNext(r) <= t);
+    const later = list.filter(r => S.routineNext(r) > t);
+    const html = `
+      <div class="page-head"><div><h1>例行事項</h1><p>每週、每月、每季固定要做的事。按「完成這次」，會自動算出下一次的日期。</p></div>
+        <div class="actions"><button class="btn primary" data-act="new">＋ 新增</button></div></div>
+      <section class="panel"><div class="panel-head"><h2>該做了（${due.length}）</h2></div>
+        ${due.length ? `<ul class="list">${due.map(r => P.routineRow(r)).join('')}</ul>` : '<p class="empty">沒有到期的。</p>'}</section>
+      <section class="panel"><div class="panel-head"><h2>接下來</h2></div>
+        ${later.length ? `<ul class="list">${later.map(r => P.routineRow(r)).join('')}</ul>` : '<p class="empty">沒有。</p>'}</section>
+      <section class="panel"><h2>可以參考的例行事項</h2><ul class="plain">${IDEAS.map(i => `<li>${i}</li>`).join('')}</ul></section>`;
+    return { title: '例行事項', html };
+  }
+
+  function mount(root) {
+    root.onclick = async e => {
+      if (await P.handle(e)) return;
+      if (e.target.closest('[data-act="new"]')) { await PMO.edit.routine(null); PMO.app.render(); }
+    };
+  }
+
+  return { render, mount };
+})();
+
+</script>
+  <script>
+/* ---- js/views/indicators.js ---- */
+/* 指標儀表板：lead and lag indicators with traffic lights, grouped by BSC perspective or by unit. */
+PMO.views = PMO.views || {};
+
+PMO.views.indicators = (function () {
+  const S = PMO.store;
+  const P = PMO.parts;
+  const { esc } = PMO.util;
+  let group = 'bsc';
+
+  function render() {
+    const inds = S.data.indicators;
+    const count = k => inds.filter(i => S.indicatorLight(i) === k).length;
+    const warns = P.warnings();
+    let groups;
+    if (group === 'bsc') {
+      groups = Object.keys(S.BSC).map(k => ({ title: S.BSC[k], items: inds.filter(i => i.perspective === k) }));
+    } else if (group === 'unit') {
+      groups = [{ id: '', name: '不分單位' }].concat(S.data.bus).map(b => ({ title: b.name, items: inds.filter(i => (i.buId || '') === b.id) }));
+    } else {
+      groups = [{ title: '領先指標：提早看出趨勢', items: inds.filter(i => i.kind === 'lead') }, { title: '落後指標：最後的結果', items: inds.filter(i => i.kind === 'lag') }];
+    }
+    groups = groups.filter(g => g.items.length);
+
+    const html = `
+      <div class="page-head"><div><h1>指標</h1><p>領先指標告訴你接下來會怎樣，落後指標告訴你結果如何。兩種都記，就能在結果出來前先調整。</p></div>
+        <div class="actions"><button class="btn primary" data-act="new">＋ 新增指標</button></div></div>
+      <div class="notice"><b>只記你可以放在這裡的數字。</b> 例如自己的工作進度、件數、百分比。公司的營收、成本等機密數字不要輸入。</div>
+      <div class="panel stat-row">
+        <div class="stat"><b class="c-ok">${count('ok')}</b><span>達標</span></div>
+        <div class="stat"><b class="c-warn">${count('warn')}</b><span>注意</span></div>
+        <div class="stat"><b class="c-bad">${count('bad')}</b><span>偏離</span></div>
+        <div class="stat"><b>${count('none')}</b><span>未設定目標</span></div>
+      </div>
+      ${warns.length ? `<section class="panel"><div class="panel-head"><h2>預警</h2></div><ul class="list">${warns.map(w => `<li><span class="light-pill ${w.light}">${P.LIGHT[w.light]}</span>
+        <span class="grow">領先指標「${esc(w.i.name)}」${w.light === 'bad' ? '已偏離目標' : '接近門檻'}${w.target ? `，可能會影響「${esc(w.target.name)}」` : '。可以在編輯時設定它會影響哪個落後指標。'}</span></li>`).join('')}</ul></section>` : ''}
+      <div class="toolbar">
+        <div class="seg" role="group" aria-label="分組方式">
+          <button class="${group === 'bsc' ? 'on' : ''}" data-act="group" data-v="bsc">依 BSC 構面</button>
+          <button class="${group === 'unit' ? 'on' : ''}" data-act="group" data-v="unit">依單位</button>
+          <button class="${group === 'kind' ? 'on' : ''}" data-act="group" data-v="kind">領先／落後</button>
+        </div>
+      </div>
+      ${groups.length ? groups.map(g => `<section><h2>${esc(g.title)}</h2><div class="grid">${g.items.map(i => P.indicatorCard(i)).join('')}</div></section>`).join('')
+        : '<section class="panel"><p class="empty" style="margin:0">還沒有指標。先從一個你每週會看的數字開始，例如「等待回覆超過 5 天的件數」。</p></section>'}`;
+    return { title: '指標', html };
+  }
+
+  function mount(root) {
+    root.onclick = async e => {
+      if (await P.handle(e)) return;
+      const a = e.target.closest('[data-act]');
+      if (!a) return;
+      if (a.dataset.act === 'group') { group = a.dataset.v; PMO.app.render(); }
+      if (a.dataset.act === 'new') { await PMO.edit.indicator(null); PMO.app.render(); }
+    };
+  }
+
+  return { render, mount };
+})();
+
+</script>
+  <script>
+/* ---- js/views/bu.js ---- */
+/* Unit page: everything for one unit in one place, plus a weekly report draft. */
+PMO.views = PMO.views || {};
+
+PMO.views.bu = (function () {
+  const S = PMO.store;
+  const P = PMO.parts;
+  const { esc, fmtDate, today, addDays, copy } = PMO.util;
+  const ui = PMO.ui;
+  let reportOpen = false;
+
+  function weeklyReport(b) {
+    const t = today();
+    const from = addDays(t, -6);
+    const lines = [b.name + ' 週報（' + fmtDate(from) + '–' + fmtDate(t) + '）', ''];
+    const doneTasks = S.data.tasks.filter(x => x.buId === b.id && x.status === 'done' && x.doneOn >= from);
+    const ps = S.projectsOf(b.id).filter(p => p.status !== 'done');
+    lines.push('一、本週完成');
+    const doneMs = [];
+    ps.forEach(p => p.milestones.filter(m => m.done && m.date >= from && m.date <= t).forEach(m => doneMs.push(p.name + '：' + m.title)));
+    const doneItems = doneMs.concat(doneTasks.map(x => x.title));
+    lines.push(doneItems.length ? doneItems.map(x => '・' + x).join('\n') : '・（本週沒有記錄）');
+    lines.push('', '二、專案進度');
+    if (!ps.length) lines.push('・目前沒有進行中的專案');
+    ps.forEach(p => {
+      lines.push('・' + p.name + '｜' + (S.STATUS[p.status] || p.status) + '｜進度 ' + S.progress(p) + '%');
+      const next = p.milestones.filter(m => !m.done && m.date <= addDays(t, 14)).sort((a, c) => a.date.localeCompare(c.date));
+      if (next.length) lines.push('  接下來兩週：' + next.map(m => fmtDate(m.date).slice(5) + ' ' + m.title + (m.date < t ? '（已逾期）' : '')).join('、'));
+      const risks = p.risks.filter(r => r.status === 'open' && r.level !== 'L');
+      if (risks.length) lines.push('  需要注意：' + risks.map(r => r.title + (r.mitigation ? '（對策：' + r.mitigation + '）' : '')).join('；'));
+    });
+    const inds = S.data.indicators.filter(i => i.buId === b.id);
+    if (inds.length) {
+      lines.push('', '三、指標');
+      inds.forEach(i => { const l = S.indicatorLatest(i); lines.push('・' + i.name + '：' + (l ? l.value + (i.unit || '') : '—') + (i.target != null && i.target !== '' ? ' / 目標 ' + i.target + (i.unit || '') : '') + '（' + P.LIGHT[S.indicatorLight(i)] + '）'); });
+    }
+    const waiting = S.data.followups.filter(f => f.buId === b.id && f.status === 'waiting');
+    if (waiting.length) { lines.push('', '四、等待中的資料'); waiting.forEach(f => lines.push('・' + f.what + '（' + f.who + '）')); }
+    const qs = S.data.questions.filter(q => q.buId === b.id && q.status === 'parked');
+    if (qs.length) { lines.push('', '想跟主管確認：'); qs.forEach(q => lines.push('・' + q.text)); }
+    return lines.join('\n');
+  }
+
+  function render(params) {
+    const b = S.bu(params.id);
+    if (!b) return { title: '找不到單位', html: '<p class="empty">這個單位不存在，可能已被刪除。<a href="#/today">回今天</a></p>' };
+    const t = today();
+    const ps = S.projectsOf(b.id);
+    const tasks = S.data.tasks.filter(x => x.buId === b.id && x.status !== 'done').sort((a, c) => S.taskScore(c) - S.taskScore(a));
+    const fus = S.data.followups.filter(f => f.buId === b.id && f.status === 'waiting');
+    const rts = S.data.routines.filter(r => r.buId === b.id);
+    const inds = S.data.indicators.filter(i => i.buId === b.id);
+    const qs = S.data.questions.filter(q => q.buId === b.id && q.status === 'parked');
+
+    const rows = ps.map(p => {
+      const over = p.due && p.due < t && p.status !== 'done';
+      const next = p.milestones.filter(m => !m.done).sort((a, c) => a.date.localeCompare(c.date))[0];
+      return `<a class="proj-row" href="#/project/${esc(p.id)}">
+        <span class="proj-name">${esc(p.name)}</span>${ui.statusPill(p.status)}
+        <div class="progress" aria-label="進度 ${S.progress(p)}%"><i style="width:${S.progress(p)}%"></i></div>
+        <div class="proj-meta"><span>階段：${esc(p.stage || '—')}</span><span class="${over ? 'date over' : ''}">到期 ${fmtDate(p.due)}</span>
+        ${next ? `<span>下一步：${esc(next.title)}（${fmtDate(next.date).slice(5)}）</span>` : ''}
+        ${p.risks.some(r => r.status === 'open' && r.level === 'H') ? '<span class="pill H">有高風險</span>' : ''}</div></a>`;
+    }).join('');
+
+    const html = `
+      <div class="page-head">
+        <div><h1><span class="dot big" style="background:${esc(b.color)}"></span>${esc(b.name)}</h1>
+        <p>${esc(S.UNIT_TYPE[b.type] || '')}${b.archived ? '・已停用' : ''}${b.owner ? '・主管：' + esc(b.owner) : ''}${b.counterpart ? '・對口：' + esc(b.counterpart) : ''}</p></div>
+        <div class="actions">
+          <button class="btn" data-act="report">${reportOpen ? '收起週報' : '產生週報'}</button>
+          <button class="btn" data-act="edit-bu">編輯單位</button>
+          <button class="btn primary" data-act="new-task">＋ 任務</button>
+        </div>
+      </div>
+      ${b.archived ? '<div class="notice"><b>這個單位已停用。</b> 資料都還在，只是不會出現在選單和選項裡。到「編輯單位」取消勾選就能恢復。</div>' : ''}
+      ${b.notes ? `<p class="muted" style="margin:0">${esc(b.notes)}</p>` : ''}
+      ${reportOpen ? `<section class="panel"><div class="panel-head"><h2>週報草稿</h2><button class="btn sm" data-act="copy-report">複製</button></div>
+        <textarea id="report-text" rows="14" aria-label="週報內容">${esc(weeklyReport(b))}</textarea>
+        <p class="hint">依目前資料自動整理，貼到信件或訊息前可以再修改。內容只在你的瀏覽器產生。</p></section>` : ''}
+      <div class="grid-2">
+        <section class="panel"><div class="panel-head"><h2>待辦（${tasks.length}）</h2><button class="btn sm" data-act="new-task">＋</button></div>
+          ${tasks.length ? `<ul class="list">${tasks.map(x => P.taskRow(x, { hideUnit: true })).join('')}</ul>` : '<p class="empty">沒有待辦。</p>'}</section>
+        <section class="panel"><div class="panel-head"><h2>等待回覆（${fus.length}）</h2><button class="btn sm" data-act="new-fu">＋</button></div>
+          ${fus.length ? `<ul class="list">${fus.map(f => P.followRow(f, { hideUnit: true })).join('')}</ul>` : '<p class="empty">沒有在等的。</p>'}</section>
+      </div>
+      <section class="panel"><div class="panel-head"><h2>專案（${ps.length}）</h2><button class="btn sm" data-act="new-project">＋ 專案</button></div>
+        ${rows || '<p class="empty">還沒有專案。</p>'}</section>
+      ${inds.length ? `<section><div class="panel-head"><h2>指標</h2><button class="btn sm" data-act="new-ind">＋ 指標</button></div><div class="grid">${inds.map(i => P.indicatorCard(i, { hideUnit: true })).join('')}</div></section>`
+        : `<section class="panel"><div class="panel-head"><h2>指標</h2><button class="btn sm" data-act="new-ind">＋ 指標</button></div><p class="empty">還沒有這個單位的指標。</p></section>`}
+      <div class="grid-2">
+        <section class="panel"><div class="panel-head"><h2>例行事項</h2><button class="btn sm" data-act="new-rt">＋</button></div>
+          ${rts.length ? `<ul class="list">${rts.map(r => P.routineRow(r, { hideUnit: true })).join('')}</ul>` : '<p class="empty">沒有。</p>'}</section>
+        <section class="panel"><div class="panel-head"><h2>待問主管</h2><a href="#/questions" class="small">全部 →</a></div>
+          ${qs.length ? `<ul class="list">${qs.map(q => `<li><span class="grow">${esc(q.text)}</span><span class="date">${fmtDate(q.created).slice(5)}</span></li>`).join('')}</ul>` : '<p class="empty">沒有待問的問題。</p>'}</section>
+      </div>`;
+    return { title: b.name, html };
+  }
+
+  function mount(root, params) {
+    const b = S.bu(params.id);
+    root.onclick = async e => {
+      if (await P.handle(e)) return;
+      const a = e.target.closest('[data-act]');
+      if (!a || !b) return;
+      const act = a.dataset.act;
+      if (act === 'edit-bu') { await PMO.edit.bu(b); PMO.app.render(); }
+      if (act === 'new-project') { const p = await PMO.edit.project(b.id); if (p) location.hash = '#/project/' + p.id; }
+      if (act === 'new-task') { await PMO.edit.task(null, { buId: b.id }); PMO.app.render(); }
+      if (act === 'new-fu') { await PMO.edit.followup(null, { buId: b.id }); PMO.app.render(); }
+      if (act === 'new-ind') { await PMO.edit.indicator(null, { buId: b.id }); PMO.app.render(); }
+      if (act === 'new-rt') { const r = await PMO.edit.routine(null); if (r) { r.buId = r.buId || b.id; S.save(); } PMO.app.render(); }
+      if (act === 'report') { reportOpen = !reportOpen; PMO.app.render(); }
+      if (act === 'copy-report') { const ok = await copy(document.getElementById('report-text').value); ui.toast(ok ? '已複製週報' : '複製失敗，請手動選取文字'); }
+    };
+  }
+
+  return { render, mount, weeklyReport };
+})();
+
+</script>
+  <script>
+/* ---- js/views/project.js ---- */
+/* Project detail: milestones, risks, KPIs, meeting log. */
+PMO.views.project = (function () {
+  const S = PMO.store;
+  const { esc, fmtDate, today, uid } = PMO.util;
+  const ui = PMO.ui;
+
+  function render(params) {
+    const p = S.project(params.id);
+    if (!p) return { title: '找不到專案', html: '<p class="empty">這個專案不存在，可能已被刪除。<a href="#/dashboard">回總覽</a></p>' };
+    const b = S.bu(p.buId);
+    const t = today();
+    const ms = p.milestones.slice().sort((a, c) => String(a.date).localeCompare(String(c.date)));
+
+    const msHtml = ms.length ? `<ul class="list">${ms.map(m => `<li>
+        <input type="checkbox" class="check" data-act="toggle-ms" data-id="${esc(m.id)}" ${m.done ? 'checked' : ''} aria-label="完成 ${esc(m.title)}">
+        <span class="date ${!m.done && m.date < t ? 'over' : ''}">${fmtDate(m.date)}</span>
+        <span class="grow ${m.done ? 'done-text' : ''}">${esc(m.title)}</span>
+        <button class="btn sm ghost" data-act="edit-ms" data-id="${esc(m.id)}">編輯</button></li>`).join('')}</ul>`
+      : '<p class="empty">還沒有里程碑。把專案拆成幾個有日期的節點，日曆同步和週報都會用到。</p>';
+
+    const riskHtml = p.risks.length ? `<ul class="list">${p.risks.map(r => `<li>
+        ${ui.levelPill(r.level)}
+        <span class="grow ${r.status === 'closed' ? 'done-text' : ''}">${esc(r.title)}${r.mitigation ? `<br><span class="small muted">對策：${esc(r.mitigation)}</span>` : ''}</span>
+        <button class="btn sm ghost" data-act="edit-risk" data-id="${esc(r.id)}">編輯</button></li>`).join('')}</ul>`
+      : '<p class="empty">沒有登記的風險。</p>';
+
+    const kpiHtml = p.kpis.length ? `<div class="table-wrap"><table><thead><tr><th>指標</th><th>期間</th><th class="num">目標</th><th class="num">實際</th><th class="num">達成</th><th></th></tr></thead><tbody>
+      ${p.kpis.map(k => {
+        const rate = k.target ? Math.round((Number(k.actual) || 0) / Number(k.target) * 100) : null;
+        return `<tr><td>${esc(k.name)}</td><td>${esc(k.period || '')}</td><td class="num">${esc(k.target ?? '—')} ${esc(k.unit || '')}</td>
+        <td class="num">${esc(k.actual ?? '—')} ${esc(k.unit || '')}</td><td class="num">${rate == null ? '—' : rate + '%'}</td>
+        <td><button class="btn sm ghost" data-act="edit-kpi" data-id="${esc(k.id)}">編輯</button></td></tr>`;
+      }).join('')}</tbody></table></div>`
+      : '<p class="empty">還沒有 KPI。</p>';
+
+    const logs = p.logs.slice().sort((a, c) => String(c.date).localeCompare(String(a.date)));
+    const logHtml = logs.length ? `<ul class="list">${logs.map(l => `<li>
+        <span class="date">${fmtDate(l.date)}</span>
+        <span class="grow"><b>${esc(l.title)}</b>${l.notes ? `<br><span class="small">${esc(l.notes)}</span>` : ''}${l.actions ? `<br><span class="small muted">待辦：${esc(l.actions)}</span>` : ''}</span>
+        <button class="btn sm ghost" data-act="edit-log" data-id="${esc(l.id)}">編輯</button></li>`).join('')}</ul>`
+      : '<p class="empty">還沒有紀錄。每次對齊會後記三件事：結論、待辦、下次時間。</p>';
+
+    const html = `
+      <div class="page-head">
+        <div>
+          <div class="small"><a href="#/bu/${esc(p.buId)}">${esc(b ? b.name : '未分類')}</a></div>
+          <h1>${esc(p.name)}</h1>
+          <p>${ui.statusPill(p.status)} 階段：${esc(p.stage || '—')}｜${fmtDate(p.start)} → ${fmtDate(p.due)}｜負責：${esc(p.owner || '—')}</p>
+        </div>
+        <div class="actions"><button class="btn" data-act="edit-project">編輯專案</button></div>
+      </div>
+      ${p.summary ? `<p style="margin:0">${esc(p.summary)}</p>` : ''}
+      <div class="progress" style="height:8px"><i style="width:${S.progress(p)}%"></i></div>
+      <div class="grid-2">
+        <section class="panel"><div class="panel-head"><h2>里程碑</h2><button class="btn sm" data-act="new-ms">＋ 新增</button></div>${msHtml}</section>
+        <section class="panel"><div class="panel-head"><h2>風險</h2><button class="btn sm" data-act="new-risk">＋ 新增</button></div>${riskHtml}</section>
+      </div>
+      <section class="panel"><div class="panel-head"><h2>KPI</h2><button class="btn sm" data-act="new-kpi">＋ 新增</button></div>${kpiHtml}</section>
+      <section class="panel"><div class="panel-head"><h2>會議與對齊紀錄</h2><button class="btn sm" data-act="new-log">＋ 新增</button></div>${logHtml}</section>`;
+    return { title: p.name, html };
+  }
+
+  async function editItem(p, kind, item) {
+    const isNew = !item;
+    const cur = item || {};
+    const defs = {
+      ms: { list: 'milestones', title: '里程碑', fields: [
+        { name: 'title', label: '內容', value: cur.title, required: true },
+        { name: 'date', label: '日期', type: 'date', value: cur.date || today(), row: true },
+        { name: 'done', label: '狀態', type: 'checkbox', value: cur.done, checkLabel: '已完成', row: true }] },
+      risk: { list: 'risks', title: '風險', fields: [
+        { name: 'title', label: '風險描述', value: cur.title, required: true },
+        { name: 'level', label: '等級', type: 'select', value: cur.level || 'M', row: true, options: [{ value: 'H', label: '高' }, { value: 'M', label: '中' }, { value: 'L', label: '低' }] },
+        { name: 'status', label: '狀態', type: 'select', value: cur.status || 'open', row: true, options: [{ value: 'open', label: '未結案' }, { value: 'closed', label: '已結案' }] },
+        { name: 'mitigation', label: '對策', type: 'textarea', value: cur.mitigation }] },
+      kpi: { list: 'kpis', title: 'KPI', fields: [
+        { name: 'name', label: '指標名稱', value: cur.name, required: true },
+        { name: 'period', label: '期間', value: cur.period, placeholder: '例如：2026 Q4', row: true },
+        { name: 'unit', label: '單位', value: cur.unit, placeholder: '%、件、萬元', row: true },
+        { name: 'target', label: '目標', type: 'number', value: cur.target, row: true },
+        { name: 'actual', label: '實際', type: 'number', value: cur.actual, row: true }] },
+      log: { list: 'logs', title: '紀錄', fields: [
+        { name: 'title', label: '標題', value: cur.title, required: true, placeholder: '例如：與單位企劃對齊' },
+        { name: 'date', label: '日期', type: 'date', value: cur.date || today() },
+        { name: 'notes', label: '結論', type: 'textarea', value: cur.notes },
+        { name: 'actions', label: '待辦與下次時間', type: 'textarea', value: cur.actions }] }
+    };
+    const d = defs[kind];
+    const r = await ui.form({ title: (isNew ? '新增' : '編輯') + d.title, fields: d.fields, allowDelete: !isNew });
+    if (!r) return;
+    if (r === 'delete') { p[d.list] = p[d.list].filter(x => x.id !== cur.id); }
+    else S.upsert(p[d.list], Object.assign({ id: cur.id || uid(kind) }, r));
+    S.save();
+    PMO.app.render();
+  }
+
+  function mount(root, params) {
+    const p = S.project(params.id);
+    root.onclick = async e => {
+      const a = e.target.closest('[data-act]');
+      if (!a || !p) return;
+      const act = a.dataset.act, id = a.dataset.id;
+      if (act === 'toggle-ms') {
+        const m = p.milestones.find(x => x.id === id);
+        if (m) { m.done = a.checked; S.save(); PMO.app.render(); }
+        return;
+      }
+      if (act === 'edit-project') { await PMO.edit.project(p.buId, p); PMO.app.render(); return; }
+      const [verb, kind] = act.split('-');
+      const listName = { ms: 'milestones', risk: 'risks', kpi: 'kpis', log: 'logs' }[kind];
+      if (!listName) return;
+      const item = verb === 'edit' ? p[listName].find(x => x.id === id) : null;
+      await editItem(p, kind, item);
+    };
+  }
+
+  return { render, mount };
+})();
+
+</script>
+  <script>
+/* ---- js/views/questions.js ---- */
+/* Parking lot for questions to ask the boss — collect first, ask in a batch. */
+PMO.views = PMO.views || {};
+
+PMO.views.questions = (function () {
+  const S = PMO.store;
+  const { esc, fmtDate, today, uid } = PMO.util;
+  const ui = PMO.ui;
+  const LABEL = { parked: '待問', asked: '已問', answered: '已回覆' };
+
+  function render() {
+    const qs = S.data.questions.slice().sort((a, b) => String(b.created).localeCompare(String(a.created)));
+    const group = st => qs.filter(q => q.status === st);
+    const item = q => {
+      const b = S.bu(q.buId);
+      return `<li>
+        <span class="date">${fmtDate(q.created).slice(5)}</span>
+        <span class="grow">${esc(q.text)}${q.answer ? `<br><span class="small muted">回覆：${esc(q.answer)}</span>` : ''}
+          <br><span class="small muted">${esc(b ? b.name : '不分單位')}</span></span>
+        <button class="btn sm ghost" data-act="edit" data-id="${esc(q.id)}">編輯</button></li>`;
+    };
+    const section = st => `<section class="panel"><div class="panel-head"><h2>${LABEL[st]}（${group(st).length}）</h2>
+      ${st === 'parked' && group(st).length ? '<button class="btn sm" data-act="copy">複製成清單</button>' : ''}</div>
+      ${group(st).length ? `<ul class="list">${group(st).map(item).join('')}</ul>` : '<p class="empty">沒有。</p>'}</section>`;
+
+    return {
+      title: '問題清單',
+      html: `<div class="page-head"><div><h1>問題清單</h1><p>想問主管或事業單位的事，先記下來，整理好、等時機對了再一起問。</p></div>
+        <div class="actions"><button class="btn primary" data-act="new">＋ 記一個問題</button></div></div>
+        ${section('parked')}${section('asked')}${section('answered')}`
+    };
+  }
+
+  async function edit(q) {
+    const cur = q || {};
+    const r = await ui.form({
+      title: q ? '編輯問題' : '記一個問題',
+      allowDelete: !!q,
+      fields: [
+        { name: 'text', label: '問題', type: 'textarea', value: cur.text, required: true, placeholder: '例如：新事業的追蹤表，主管希望先看哪三個指標？' },
+        { name: 'buId', label: '相關單位', type: 'select', value: cur.buId || '', row: true,
+          options: [{ value: '', label: '不分單位' }].concat(S.data.bus.map(b => ({ value: b.id, label: b.name }))) },
+        { name: 'status', label: '狀態', type: 'select', value: cur.status || 'parked', row: true,
+          options: Object.keys(LABEL).map(k => ({ value: k, label: LABEL[k] })) },
+        { name: 'answer', label: '回覆或結論', type: 'textarea', value: cur.answer }
+      ]
+    });
+    if (!r) return;
+    if (r === 'delete') S.data.questions = S.data.questions.filter(x => x.id !== cur.id);
+    else S.upsert(S.data.questions, Object.assign({ id: cur.id || uid('q'), created: cur.created || today() }, r));
+    S.save();
+    PMO.app.render();
+  }
+
+  function mount(root) {
+    root.onclick = async e => {
+      const a = e.target.closest('[data-act]');
+      if (!a) return;
+      if (a.dataset.act === 'new') await edit(null);
+      if (a.dataset.act === 'edit') await edit(S.data.questions.find(q => q.id === a.dataset.id));
+      if (a.dataset.act === 'copy') {
+        const text = S.data.questions.filter(q => q.status === 'parked').map((q, i) => (i + 1) + '. ' + q.text).join('\n');
+        const ok = await PMO.util.copy(text);
+        ui.toast(ok ? '已複製待問清單' : '複製失敗');
+      }
+    };
+  }
+
+  return { render, mount };
+})();
+
+</script>
+  <script>
+/* ---- js/views/wins.js ---- */
+/* 成果紀錄：what you did, the result, and which competencies it shows. Export to Markdown for reviews and résumés. */
+PMO.views = PMO.views || {};
+
+PMO.views.wins = (function () {
+  const S = PMO.store;
+  const { esc, fmtDate, download, today, copy } = PMO.util;
+  const ui = PMO.ui;
+  let tag = '';
+
+  function quarter(d) { const m = Number(String(d).slice(5, 7)) || 1; return String(d).slice(0, 4) + ' Q' + Math.ceil(m / 3); }
+
+  function markdown(list) {
+    const byQ = {};
+    list.forEach(w => { (byQ[quarter(w.date)] = byQ[quarter(w.date)] || []).push(w); });
+    return Object.keys(byQ).sort().reverse().map(q => '## ' + q + '\n\n' + byQ[q].map(w =>
+      '- **' + w.title + '**' + (w.impact ? '：' + w.impact : '') + (w.tags.length ? '（' + w.tags.join('、') + '）' : '') +
+      (w.english ? '\n  - ' + w.english : '')).join('\n')).join('\n\n');
+  }
+
+  function render() {
+    const all = S.data.wins.slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    const list = tag ? all.filter(w => w.tags.includes(tag)) : all;
+    const counts = S.COMPETENCIES.map(c => ({ c, n: all.filter(w => w.tags.includes(c)).length }));
+    const max = Math.max(1, ...counts.map(x => x.n));
+    const html = `
+      <div class="page-head"><div><h1>成果紀錄</h1><p>做完一件事就記一筆：做了什麼、帶來什麼結果、用到哪些能力。年度考核、談升遷或寫英文履歷時直接拿來用。</p></div>
+        <div class="actions"><button class="btn" data-act="copy" ${list.length ? '' : 'disabled'}>複製成條列</button><button class="btn" data-act="md" ${list.length ? '' : 'disabled'}>下載 Markdown</button><button class="btn primary" data-act="new">＋ 記一筆</button></div></div>
+      <section class="panel">
+        <div class="panel-head"><h2>能力分布</h2>${tag ? `<button class="btn sm ghost" data-act="tag" data-v="">清除篩選</button>` : ''}</div>
+        <div class="bars">${counts.map(x => `<button class="bar-row ${tag === x.c ? 'on' : ''}" data-act="tag" data-v="${esc(x.c)}">
+          <span>${esc(x.c)}</span><span class="bar-track"><i style="width:${x.n / max * 100}%"></i></span><span class="mono small">${x.n}</span></button>`).join('')}</div>
+        <p class="hint">還沒有紀錄的能力，就是接下來可以找機會累積的方向。點一列可以只看那項能力的成果。</p>
+      </section>
+      <section class="panel">
+        <div class="panel-head"><h2>${tag ? esc(tag) : '全部成果'}（${list.length}）</h2></div>
+        ${list.length ? `<ul class="list">${list.map(w => `<li><span class="date">${fmtDate(w.date).slice(5)}</span>
+          <span class="grow"><b>${esc(w.title)}</b>${w.impact ? `<br><span class="small">${esc(w.impact)}</span>` : ''}
+          ${w.english ? `<br><span class="small muted">${esc(w.english)}</span>` : ''}
+          <span class="row-meta">${PMO.parts.unitTag(w.buId)}${w.tags.map(t => `<span class="pill tag">${esc(t)}</span>`).join('')}</span></span>
+          <button class="btn sm ghost" data-act="edit" data-id="${esc(w.id)}">編輯</button></li>`).join('')}</ul>`
+          : '<p class="empty">還沒有紀錄。今天做完的事裡，挑一件記下來。</p>'}
+      </section>`;
+    return { title: '成果紀錄', html };
+  }
+
+  function mount(root) {
+    root.onclick = async e => {
+      const a = e.target.closest('[data-act]');
+      if (!a) return;
+      const act = a.dataset.act;
+      const list = () => S.data.wins.slice().sort((x, y) => String(y.date).localeCompare(String(x.date))).filter(w => !tag || w.tags.includes(tag));
+      if (act === 'new') { await PMO.edit.win(null); PMO.app.render(); }
+      if (act === 'edit') { await PMO.edit.win(S.data.wins.find(w => w.id === a.dataset.id)); PMO.app.render(); }
+      if (act === 'tag') { tag = a.dataset.v === tag ? '' : a.dataset.v; PMO.app.render(); }
+      if (act === 'md') download('成果紀錄-' + today() + '.md', '# 成果紀錄\n\n' + markdown(list()), 'text/markdown');
+      if (act === 'copy') { const ok = await copy(markdown(list())); ui.toast(ok ? '已複製' : '複製失敗'); }
+    };
+  }
+
+  return { render, mount };
+})();
+
+</script>
+  <script>
+/* ---- js/views/rituals.js ---- */
+/* 慢半拍儀式：daily focus checks, the bedtime three lines, weekly review, and the reference card. */
+PMO.views = PMO.views || {};
+
+PMO.views.rituals = (function () {
+  const S = PMO.store;
+  const { esc, today, fmtDate, weekKey } = PMO.util;
+  const ui = PMO.ui;
+
+  const FOCUS = [
+    { id: 'c1', title: '開口前三題', sub: '接得住嗎、一定要現在嗎、我幾分火' },
+    { id: 'c2', title: '兩秒停頓', sub: '想打斷、想反駁的時候' },
+    { id: 'c3', title: '睡前三行', sub: '直覺、我自己的一刻、我需要什麼' }
+  ];
+
+  function day(t) {
+    const days = S.data.rituals.days;
+    if (!days[t]) days[t] = { checks: {}, journal: { intuition: '', moment: '', need: '' } };
+    return days[t];
+  }
+
+  function render() {
+    const t = today();
+    const dRaw = S.data.rituals.days[t] || { checks: {}, journal: {} };
+    const j = dRaw.journal || {};
+    const wk = weekKey(t);
+    const w = S.data.rituals.weeks[wk] || {};
+    const history = Object.keys(S.data.rituals.days).filter(k => k !== t).sort().reverse().slice(0, 14)
+      .map(k => ({ k, d: S.data.rituals.days[k] }))
+      .filter(x => x.d.journal && (x.d.journal.intuition || x.d.journal.moment || x.d.journal.need));
+    const streak = (() => {
+      let n = 0;
+      for (let i = 0; i < 60; i++) {
+        const k = PMO.util.addDays(t, -i);
+        const c = S.data.rituals.days[k] && S.data.rituals.days[k].checks;
+        if (c && Object.values(c).some(Boolean)) n++; else if (i > 0) break;
+      }
+      return n;
+    })();
+
+    const html = `
+      <div class="page-head"><div><h1>慢半拍儀式</h1><p>別人的態度我看得很清楚，現在練習看見自己的。</p></div></div>
+      <p class="quote" style="margin:0;font-size:1.15rem">先停兩秒，再決定怎麼說。</p>
+      <div class="grid-2">
+        <section class="panel ritual-focus">
+          <div class="panel-head"><h2>今天先練三個</h2><span class="small muted">連續 ${streak} 天</span></div>
+          ${FOCUS.map(f => `<label for="rc_${f.id}"><input type="checkbox" class="check" id="rc_${f.id}" data-check="${f.id}" ${dRaw.checks && dRaw.checks[f.id] ? 'checked' : ''}>
+            <span><b>${f.title}</b><br><span class="small muted">${f.sub}</span></span></label>`).join('')}
+        </section>
+        <section class="panel">
+          <h2>睡前三行</h2>
+          <form id="journal-form" class="stack">
+            <div class="field"><label for="j_intuition">今天我的直覺：我覺得某人怎樣，讓我這樣想的一兩句話或行為</label><textarea id="j_intuition" name="intuition" rows="2">${esc(j.intuition || '')}</textarea></div>
+            <div class="field"><label for="j_moment">今天我自己的一刻：哪時候太快、太重，或臉太兇？對方怎麼反應</label><textarea id="j_moment" name="moment" rows="2">${esc(j.moment || '')}</textarea></div>
+            <div class="field"><label for="j_need">今天我需要什麼？休息、被肯定、一點安靜的時間</label><textarea id="j_need" name="need" rows="2">${esc(j.need || '')}</textarea></div>
+            <div class="actions"><button class="btn primary" type="submit">儲存今天</button></div>
+          </form>
+          <p class="quote small" style="margin:8px 0 0">寫完深呼吸三次：今天已經做得夠多了。</p>
+        </section>
+      </div>
+
+      <section class="panel">
+        <div class="panel-head"><h2>週回顧（${esc(wk)}）</h2></div>
+        <form id="week-form">
+          <div class="field"><label for="w_confirmed">這週的直覺，哪些被證實了？哪些是誤會？</label><textarea id="w_confirmed" name="confirmed" rows="2">${esc(w.confirmed || '')}</textarea></div>
+          <div class="field"><label for="w_trigger">我最常在什麼情況下力道失控？累、被質疑、聽到抱怨？</label><textarea id="w_trigger" name="trigger" rows="2">${esc(w.trigger || '')}</textarea></div>
+          <div class="field"><label for="w_next">下週想多練哪一點？</label><textarea id="w_next" name="next" rows="2">${esc(w.next || '')}</textarea></div>
+          <div class="actions"><button class="btn" type="submit">儲存週回顧</button></div>
+        </form>
+        <p class="hint">每個月問主管一次：最近我的溝通有沒有進步？</p>
+      </section>
+
+      <div class="grid-2">
+        <section class="panel">
+          <h2>流程參考</h2>
+          <details class="ref" open><summary>開口前三題（3 秒）</summary><ol>
+            <li>他現在接得住嗎？累、忙、生病、剛被罵，先緩。</li>
+            <li>一定要現在講嗎？明天再說沒損失，就先記到問題清單。</li>
+            <li>我現在幾分火？超過 5 分，力道自動降一級。</li></ol>
+            <p class="small" style="margin:6px 0 0">力道預設從輕開始：<b>輕</b> 我在想…／<b>中</b> 我有點擔心…／<b>重</b> 這要現在處理</p></details>
+          <details class="ref"><summary>進會議前兩問（30 秒）</summary><ol><li>我今天要達成什麼？</li><li>對方最在意什麼？</li></ol></details>
+          <details class="ref"><summary>對話中，掃一下自己</summary><ul>
+            <li>我的臉：有沒有在笑？不笑時看起來比較兇。</li>
+            <li>我的速度：是不是在搶話？變快就把手放到桌上。</li>
+            <li>我的用字：有沒有「每次」、「根本」、「你就是」？</li>
+            <li>對方回應變短、變安靜、開始解釋，就停下來問：你怎麼看？</li></ul></details>
+          <details class="ref"><summary>對話後：鏡子檢查</summary><p class="small" style="margin:6px 0 0">他變臉之前，我剛剛說了什麼、用什麼語氣？</p></details>
+          <details class="ref"><summary>聽到抱怨時</summary><ul>
+            <li>他需要被聽：「聽起來真的很煩。」</li>
+            <li>他需要被幫：才進入解決問題。</li>
+            <li>第三次了：「這件事你有想怎麼處理嗎？我可以幫你想想。」</li>
+            <li>我沒力氣了：「我等等有個東西要趕，我們晚點再聊。」</li></ul></details>
+          <details class="ref"><summary>下班那一刻</summary><p class="small" style="margin:6px 0 0">今天的工作就結束了，公司的事明天再想。</p></details>
+        </section>
+        <section class="panel">
+          <h2>力道表</h2>
+          <p class="small muted" style="margin-top:0">越公開、人越多、關係越不熟，力道越輕。</p>
+          <div class="force">
+            ${[['一對一、信任的人（主管、熟同事）', 7], ['小會議、合作單位（事業單位、支援部門）', 5], ['大會議、有高層或其他部門', 3], ['對方或我正在情緒上', 1]]
+              .map(([l, v]) => `<div class="force-row"><span>${l}</span><span class="small muted mono">${v} / 10</span><div class="bar"><i style="width:${v * 10}%"></i></div></div>`).join('')}
+          </div>
+        </section>
+      </div>
+
+      <section class="panel">
+        <h2>最近的睡前三行</h2>
+        ${history.length ? `<ul class="list">${history.map(({ k, d }) => `<li><span class="date">${fmtDate(k).slice(5)}</span><span class="grow small">
+          ${d.journal.intuition ? '直覺：' + esc(d.journal.intuition) + '<br>' : ''}${d.journal.moment ? '我的一刻：' + esc(d.journal.moment) + '<br>' : ''}${d.journal.need ? '需要：' + esc(d.journal.need) : ''}</span></li>`).join('')}</ul>`
+          : '<p class="empty">寫過的紀錄會出現在這裡，週回顧時翻一下。</p>'}
+      </section>
+      <p class="quote" style="text-align:center;margin:0">又太直接一次不是退步，是我開始看得見了。</p>`;
+    return { title: '慢半拍儀式', html };
+  }
+
+  function mount(root) {
+    root.onchange = e => {
+      const c = e.target.closest('[data-check]');
+      if (!c) return;
+      day(today()).checks[c.dataset.check] = c.checked;
+      S.save();
+    };
+    root.querySelector('#journal-form').onsubmit = e => {
+      e.preventDefault();
+      const f = e.target;
+      day(today()).journal = { intuition: f.intuition.value.trim(), moment: f.moment.value.trim(), need: f.need.value.trim() };
+      day(today()).checks.c3 = true;
+      S.save(); ui.toast('已儲存今天的睡前三行');
+      PMO.app.render();
+    };
+    root.querySelector('#week-form').onsubmit = e => {
+      e.preventDefault();
+      const f = e.target;
+      S.data.rituals.weeks[weekKey(today())] = { confirmed: f.confirmed.value.trim(), trigger: f.trigger.value.trim(), next: f.next.value.trim() };
+      S.save(); ui.toast('已儲存週回顧');
+    };
+    root.onclick = null;
+  }
+
+  return { render, mount };
+})();
+
+</script>
+  <script>
+/* ---- js/views/calendar.js ---- */
+/* Google Calendar: connect, push milestones, see the next two weeks. */
+PMO.views = PMO.views || {};
+
+PMO.views.calendar = (function () {
+  const S = PMO.store;
+  const { esc, fmtDate } = PMO.util;
+  const ui = PMO.ui;
+  let events = null;
+  let lastResult = null;
+
+  function render() {
+    const hasId = !!S.settings.googleClientId;
+    const isFile = location.protocol === 'file:';
+    const pending = PMO.gcal.items(false);
+    const inc = S.settings.gcalInclude;
+    const mapped = Object.keys(S.settings.gcalMap || {}).length;
+
+    const evHtml = events == null ? '<p class="empty">連接後可以看到日曆上接下來兩週的行程。</p>'
+      : events.length ? `<ul class="list">${events.map(ev => `<li>
+          <span class="date">${esc(ev.allDay ? fmtDate(ev.start).slice(5) : ev.start.slice(5, 16).replace('T', ' '))}</span>
+          <span class="grow">${esc(ev.title)}</span>${ev.fromPmo ? '<span class="pill tag">PMO</span>' : ''}</li>`).join('')}</ul>`
+      : '<p class="empty">接下來兩週沒有行程。</p>';
+
+    const html = `
+      <div class="page-head"><div><h1>Google 日曆</h1><p>把里程碑、有截止日的任務和要追的回覆同步成整天的日曆事件。改日期或標完成後再同步一次就會更新。</p></div></div>
+      ${isFile ? '<div class="notice"><b>目前是直接開啟檔案。</b> Google 登入需要用網址開啟，請照 README 用 GitHub Pages 或本機伺服器打開。下面的 .ics 匯出不受影響。</div>' : ''}
+      ${!hasId ? '<div class="notice"><b>還沒設定 Google Client ID。</b> 到「設定」填入後才能連接，步驟寫在 README 的「Google 日曆設定」。</div>' : ''}
+      <section class="panel">
+        <div class="panel-head"><h2>同步到日曆</h2><span class="small muted">日曆：${esc(S.settings.gcalCalendarId || 'primary')}</span></div>
+        <div class="toolbar" style="margin-bottom:10px">
+          <label class="small"><input type="checkbox" data-inc="milestones" ${inc.milestones !== false ? 'checked' : ''}> 里程碑</label>
+          <label class="small"><input type="checkbox" data-inc="tasks" ${inc.tasks !== false ? 'checked' : ''}> 任務截止日</label>
+          <label class="small"><input type="checkbox" data-inc="followups" ${inc.followups !== false ? 'checked' : ''}> 追回覆的日子</label>
+        </div>
+        <p style="margin-top:0">待同步：${pending.length} 項・已對應到日曆：${mapped} 項</p>
+        <div class="actions">
+          <button class="btn" data-act="connect" ${!hasId || isFile ? 'disabled' : ''}>${PMO.gcal.connected() ? '重新授權' : '連接 Google'}</button>
+          <button class="btn primary" data-act="sync" ${!hasId || isFile ? 'disabled' : ''}>同步未完成的項目</button>
+          <button class="btn" data-act="sync-all" ${!hasId || isFile ? 'disabled' : ''}>連已完成的一起同步</button>
+          <button class="btn ghost" data-act="ics">改用 .ics 檔匯出</button>
+        </div>
+        ${lastResult ? `<div class="notice ok" style="margin-top:12px">${esc(lastResult)}</div>` : ''}
+        <p class="hint">只會寫入你選的日曆，事件標題會標上 [單位] 或 [任務]、[追回覆]。在工具裡刪掉項目，不會自動刪除日曆上的事件。.ics 匯出目前只包含里程碑。</p>
+      </section>
+      <section class="panel">
+        <div class="panel-head"><h2>接下來兩週</h2><button class="btn sm" data-act="refresh" ${!hasId || isFile ? 'disabled' : ''}>重新整理</button></div>
+        ${evHtml}
+      </section>`;
+    return { title: 'Google 日曆', html };
+  }
+
+  function mount(root) {
+    root.onchange = e => {
+      const c = e.target.closest('[data-inc]');
+      if (!c) return;
+      S.settings.gcalInclude[c.dataset.inc] = c.checked; S.saveSettings(); PMO.app.render();
+    };
+    root.onclick = async e => {
+      const a = e.target.closest('[data-act]');
+      if (!a || a.disabled) return;
+      const act = a.dataset.act;
+      if (act === 'ics') { PMO.backup.exportICS(); ui.toast('已下載 .ics 檔，可以匯入 Google、Outlook 或 Apple 日曆'); return; }
+      a.disabled = true;
+      try {
+        if (act === 'connect') { await PMO.gcal.signIn(); ui.toast('已連接 Google 日曆'); events = await PMO.gcal.upcoming(14); }
+        if (act === 'sync' || act === 'sync-all') {
+          ui.toast('同步中…');
+          const r = await PMO.gcal.sync({ includeDone: act === 'sync-all' });
+          lastResult = `同步完成：新增 ${r.created}、更新 ${r.updated}${r.failed ? '、失敗 ' + r.failed : ''}（共 ${r.total} 個）`;
+          events = await PMO.gcal.upcoming(14);
+        }
+        if (act === 'refresh') events = await PMO.gcal.upcoming(14);
+      } catch (err) {
+        ui.toast(err.message);
+        lastResult = '沒有完成：' + err.message;
+      }
+      PMO.app.render();
+    };
+  }
+
+  return { render, mount };
+})();
+
+</script>
+  <script>
+/* ---- js/views/ai.js ---- */
+/* AI consultation chat. Conversation lives in memory only; nothing is kept after you close the tab. */
+PMO.views = PMO.views || {};
+
+PMO.views.ai = (function () {
+  const S = PMO.store;
+  const { esc } = PMO.util;
+  const ui = PMO.ui;
+  const messages = [];
+  let scope = 'none';
+  let busy = false;
+
+  const PROMPTS = [
+    '幫我把這週的進度整理成給主管的三點重點',
+    '依我的待辦，今天和這週應該先做哪幾件？為什麼？',
+    '幫我替這個單位想三個領先指標和兩個落後指標',
+    '這個單位最需要先處理的風險是什麼？',
+    '我想跟事業單位要資料，怎麼開口比較不會讓對方有壓力？',
+    '主管說我太直接，這句話可以怎麼換個說法：',
+    '這件事要做成 OKR，目標和關鍵結果可以怎麼寫？',
+    '幫我列出下次對齊會要確認的問題'
+  ];
+
+  function render() {
+    const hasKey = PMO.ai.ready();
+    const opts = [{ v: 'none', l: '不附資料' }, { v: 'all', l: '附上全部單位摘要' }]
+      .concat(S.activeBus().map(b => ({ v: b.id, l: '附上：' + b.name })));
+    const html = `
+      <div class="page-head"><div><h1>AI 諮詢</h1><p>目前使用：${esc(PMO.ai.providerLabel())}。對話不會存檔，關掉分頁就清空。</p></div>
+        <div class="actions"><button class="btn" data-act="clear" ${messages.length ? '' : 'disabled'}>清除對話</button></div></div>
+      ${!hasKey ? '<div class="notice"><b>還沒設定 AI 服務。</b> 到「設定」選擇服務並填入金鑰後就能使用。</div>' : ''}
+      <div class="notice"><b>送出前想一下：</b> 附上的資料會傳到你選的 AI 服務。公司機密、個資或尚未公開的數字不要放進來；如果公司有核准的 AI 服務，優先用公司的。</div>
+      <section class="panel stack">
+        <div class="field" style="margin:0"><label for="ai-scope">要附上的工作台資料</label>
+          <select id="ai-scope">${opts.map(o => `<option value="${esc(o.v)}" ${o.v === scope ? 'selected' : ''}>${esc(o.l)}</option>`).join('')}</select></div>
+        <div class="chips">${PROMPTS.map((p, i) => `<button class="chip" data-act="prompt" data-i="${i}">${esc(p)}</button>`).join('')}</div>
+        <div class="chat" id="chat">${messages.length ? messages.map(m => `<div class="msg ${m.role.startsWith('user') ? 'user' : m.role === 'error' ? 'error' : 'assistant'}">${esc(m.content)}</div>`).join('')
+          : '<p class="empty">從上面選一個問題，或直接輸入。</p>'}
+          ${busy ? '<div class="msg assistant muted">思考中…</div>' : ''}</div>
+        <form class="chat-input" id="ai-form">
+          <textarea id="ai-text" placeholder="輸入你的問題，Enter 換行，按送出" aria-label="問題"></textarea>
+          <button class="btn primary" type="submit" ${busy || !hasKey ? 'disabled' : ''}>送出</button>
+        </form>
+      </section>`;
+    return { title: 'AI 諮詢', html };
+  }
+
+  async function send(text) {
+    if (!text.trim() || busy) return;
+    messages.push({ role: 'user', content: text.trim() });
+    busy = true;
+    PMO.app.render();
+    try {
+      const context = scope === 'none' ? '' : PMO.ai.snapshot(scope);
+      const history = messages.filter(m => m.role === 'user' || m.role === 'assistant');
+      const reply = await PMO.ai.ask(history, { context });
+      messages.push({ role: 'assistant', content: reply || '（沒有回覆內容）' });
+    } catch (e) {
+      messages.push({ role: 'error', content: e.message });
+      // Drop the failed question from the history sent next time, but keep it visible.
+      const last = messages.length - 2;
+      if (messages[last] && messages[last].role === 'user') messages[last].role = 'user-failed';
+    }
+    busy = false;
+    PMO.app.render();
+    const chat = document.getElementById('chat');
+    if (chat) chat.lastElementChild && chat.lastElementChild.scrollIntoView({ block: 'nearest' });
+  }
+
+  function mount(root) {
+    root.querySelector('#ai-scope').onchange = e => { scope = e.target.value; };
+    root.querySelector('#ai-form').onsubmit = e => { e.preventDefault(); send(root.querySelector('#ai-text').value); };
+    root.onclick = e => {
+      const a = e.target.closest('[data-act]');
+      if (!a) return;
+      if (a.dataset.act === 'prompt') { const ta = root.querySelector('#ai-text'); ta.value = PROMPTS[Number(a.dataset.i)]; ta.focus(); }
+      if (a.dataset.act === 'clear') { messages.length = 0; PMO.app.render(); ui.toast('已清除對話'); }
+    };
+  }
+
+  return { render, mount };
+})();
+
+</script>
+  <script>
+/* ---- js/views/connectors.js ---- */
+/* API connectors: save endpoints, test them, push backups to a webhook. */
+PMO.views = PMO.views || {};
+
+PMO.views.connectors = (function () {
+  const S = PMO.store;
+  const { esc, uid } = PMO.util;
+  const ui = PMO.ui;
+  const results = {};
+
+  function render() {
+    const list = PMO.connectors.list();
+    const html = `
+      <div class="page-head"><div><h1>API 連接</h1><p>存下常用的 API 端點，一鍵呼叫看回傳的資料，或把備份推送到你自己的 webhook。</p></div>
+        <div class="actions"><button class="btn primary" data-act="new">＋ 新增連接</button></div></div>
+      <div class="notice"><b>注意：</b> 呼叫是從瀏覽器直接發出的，對方的 API 必須允許跨網域（CORS）。Token 只存在這台電腦的瀏覽器，不會放進備份檔。公司內部系統請先確認 IT 是否允許。</div>
+      ${list.length ? list.map(c => `<section class="panel">
+          <div class="panel-head"><h2>${esc(c.name)}</h2>
+            <div class="actions"><button class="btn sm" data-act="run" data-id="${esc(c.id)}">呼叫</button>
+            <button class="btn sm" data-act="push" data-id="${esc(c.id)}">推送備份</button>
+            <button class="btn sm ghost" data-act="edit" data-id="${esc(c.id)}">編輯</button></div></div>
+          <p class="mono small" style="margin:0;overflow-wrap:anywhere">${esc(c.method || 'GET')} ${esc(c.url)}</p>
+          ${results[c.id] ? `<p class="small ${results[c.id].ok ? '' : 'muted'}" style="margin:10px 0 6px">${esc(results[c.id].summary)}</p><pre class="out">${esc(results[c.id].body)}</pre>` : ''}
+        </section>`).join('')
+        : `<section class="panel"><p class="empty" style="margin:0">還沒有連接。可以先用公開的測試 API 試試看，例如：<br><span class="mono">GET https://api.github.com/repos/github/docs</span></p></section>`}`;
+    return { title: 'API 連接', html };
+  }
+
+  async function edit(c) {
+    const cur = c || {};
+    const r = await ui.form({
+      title: c ? '編輯連接' : '新增連接',
+      allowDelete: !!c,
+      fields: [
+        { name: 'name', label: '名稱', value: cur.name, required: true, placeholder: '例如：KPI 系統' },
+        { name: 'method', label: '方法', type: 'select', value: cur.method || 'GET', row: true,
+          options: ['GET', 'POST', 'PUT', 'PATCH'].map(m => ({ value: m, label: m })) },
+        { name: 'url', label: '網址', type: 'url', value: cur.url, required: true, placeholder: 'https://…', row: true },
+        { name: 'headers', label: 'Headers（JSON）', type: 'textarea', value: cur.headers, placeholder: '{"Authorization": "Bearer …"}', hint: '只存在這台電腦，匯出備份時會自動清掉。' },
+        { name: 'body', label: 'Body（POST/PUT 用）', type: 'textarea', value: cur.body, placeholder: '{"key": "value"}' }
+      ]
+    });
+    if (!r) return;
+    const list = PMO.connectors.list();
+    if (r === 'delete') S.settings.connectors = list.filter(x => x.id !== cur.id);
+    else S.upsert(list, Object.assign({ id: cur.id || uid('c') }, r));
+    S.saveSettings();
+    PMO.app.render();
+  }
+
+  function mount(root) {
+    root.onclick = async e => {
+      const a = e.target.closest('[data-act]');
+      if (!a) return;
+      const c = PMO.connectors.list().find(x => x.id === a.dataset.id);
+      if (a.dataset.act === 'new') return edit(null);
+      if (a.dataset.act === 'edit') return edit(c);
+      if (!c) return;
+      a.disabled = true;
+      try {
+        const res = a.dataset.act === 'push' ? await PMO.connectors.pushBackup(c) : await PMO.connectors.run(c);
+        results[c.id] = {
+          ok: res.ok,
+          summary: (res.ok ? '成功' : '失敗') + '・HTTP ' + res.status + '・' + res.ms + ' ms',
+          body: res.json ? JSON.stringify(res.json, null, 2).slice(0, 20000) : res.text.slice(0, 20000)
+        };
+      } catch (err) {
+        results[c.id] = { ok: false, summary: err.message, body: '' };
+      }
+      PMO.app.render();
+    };
+  }
+
+  return { render, mount };
+})();
+
+</script>
+  <script>
+/* ---- js/views/backup.js ---- */
+/* Backup, restore and exports. */
+PMO.views = PMO.views || {};
+
+PMO.views.backup = (function () {
+  const S = PMO.store;
+  const { esc, readFile } = PMO.util;
+  const ui = PMO.ui;
+  let pending = null;
+  let resetArmed = false;
+
+  function render() {
+    const days = PMO.backup.daysSinceBackup();
+    const d = S.data;
+    const size = (() => { try { return Math.round(JSON.stringify(d).length / 1024); } catch (e) { return 0; } })();
+    const html = `
+      <div class="page-head"><div><h1>備份與匯出</h1><p>資料只存在這個瀏覽器裡。換電腦、清除瀏覽資料前，記得先備份。</p></div></div>
+      ${!S.saveOk ? '<div class="notice"><b>瀏覽器沒有允許儲存。</b> 可能是無痕模式或封鎖了網站資料，關掉分頁後資料會消失，請先匯出備份。</div>' : ''}
+      <section class="panel">
+        <div class="panel-head"><h2>完整備份（JSON）</h2><span class="small muted">${days == null ? '還沒有備份過' : days === 0 ? '今天已備份' : '上次備份：' + days + ' 天前'}・約 ${size} KB</span></div>
+        <p style="margin-top:0">包含所有單位、任務、等待回覆、例行事項、指標、成果、專案、問題清單和儀式紀錄。API key 與連接的 token 不會放進去。</p>
+        <div class="actions">
+          <button class="btn primary" data-act="export">下載備份</button>
+          <button class="btn" data-act="export-settings">下載備份＋設定（不含金鑰）</button>
+        </div>
+      </section>
+      <section class="panel">
+        <h2>還原備份</h2>
+        <div class="field"><label for="import-file">選擇備份檔（.json）</label><input type="file" id="import-file" accept="application/json,.json"></div>
+        ${pending ? `<div class="notice ok">讀到 ${pending.data.bus.length} 個單位、${(pending.data.tasks || []).length} 個任務、${pending.data.projects.length} 個專案${pending.settings ? '，含設定' : ''}。要怎麼匯入？</div>
+          <div class="actions" style="margin-top:10px">
+            <button class="btn primary" data-act="merge">合併（保留現有，同 ID 以檔案為準）</button>
+            <button class="btn" data-act="replace">整個取代</button>
+            <button class="btn ghost" data-act="cancel-import">取消</button></div>` : ''}
+      </section>
+      <section class="panel">
+        <h2>匯出表格與日曆</h2>
+        <p style="margin-top:0">CSV 可以直接用 Excel 開啟，中文不會變亂碼。</p>
+        <div class="actions">
+          <button class="btn" data-act="csv" data-kind="tasks">任務 CSV</button>
+          <button class="btn" data-act="csv" data-kind="followups">等待回覆 CSV</button>
+          <button class="btn" data-act="csv" data-kind="indicators">指標 CSV</button>
+          <button class="btn" data-act="csv" data-kind="wins">成果 CSV</button>
+          <button class="btn" data-act="csv" data-kind="projects">專案 CSV</button>
+          <button class="btn" data-act="csv" data-kind="milestones">里程碑 CSV</button>
+          <button class="btn" data-act="csv" data-kind="risks">風險 CSV</button>
+          <button class="btn" data-act="csv" data-kind="kpis">KPI CSV</button>
+          <button class="btn" data-act="ics">里程碑 .ics</button>
+        </div>
+      </section>
+      <section class="panel">
+        <h2>重新開始</h2>
+        <p style="margin-top:0">清除這個瀏覽器裡的所有工作資料（設定與金鑰會保留）。建議先下載備份。</p>
+        <div class="actions">
+          <button class="btn danger" data-act="wipe">${resetArmed ? '再按一次：確定清空' : '清空所有資料'}</button>
+          <button class="btn ghost" data-act="sample">載入範例資料</button>
+        </div>
+      </section>`;
+    return { title: '備份與匯出', html };
+  }
+
+  function mount(root) {
+    root.querySelector('#import-file').onchange = async e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        pending = PMO.backup.parseBackup(await readFile(file));
+      } catch (err) {
+        pending = null;
+        ui.toast(err instanceof SyntaxError ? '檔案不是有效的 JSON' : err.message);
+      }
+      PMO.app.render();
+    };
+    root.onclick = e => {
+      const a = e.target.closest('[data-act]');
+      if (!a) return;
+      const act = a.dataset.act;
+      if (act !== 'wipe') resetArmed = false;
+      if (act === 'export') { PMO.backup.exportJSON(false); ui.toast('已下載備份'); PMO.app.render(); }
+      if (act === 'export-settings') { PMO.backup.exportJSON(true); ui.toast('已下載備份與設定'); PMO.app.render(); }
+      if (act === 'merge' || act === 'replace') {
+        PMO.backup.importData(pending, act); pending = null;
+        ui.toast(act === 'merge' ? '已合併匯入' : '已取代為備份內容'); PMO.app.render();
+      }
+      if (act === 'cancel-import') { pending = null; PMO.app.render(); }
+      if (act === 'csv') { PMO.backup.exportCSV(a.dataset.kind); ui.toast('已下載 CSV'); }
+      if (act === 'ics') { PMO.backup.exportICS(); ui.toast('已下載 .ics'); }
+      if (act === 'wipe') {
+        if (!resetArmed) { resetArmed = true; PMO.app.render(); return; }
+        resetArmed = false; S.reset(false); ui.toast('已清空，從頭開始'); location.hash = '#/today';
+      }
+      if (act === 'sample') { S.reset(true); ui.toast('已載入範例資料'); location.hash = '#/today'; }
+    };
+  }
+
+  return { render, mount };
+})();
+
+</script>
+  <script>
+/* ---- js/views/settings.js ---- */
+/* Settings: theme, reminders, Google Calendar, AI provider. */
+PMO.views = PMO.views || {};
+
+PMO.views.settings = (function () {
+  const S = PMO.store;
+  const { esc } = PMO.util;
+  const ui = PMO.ui;
+
+  function render() {
+    const s = S.settings;
+    const origin = location.protocol === 'file:' ? '（目前是直接開檔，請改用網址開啟）' : location.origin;
+    const perm = PMO.notify.permission();
+    const isClaude = s.aiProvider !== 'openai';
+    const html = `
+      <div class="page-head"><div><h1>設定</h1><p>這些設定只存在這個瀏覽器。金鑰不會放進備份檔。</p></div></div>
+      <form id="settings-form" class="stack">
+        <section class="panel">
+          <h2>外觀</h2>
+          <div class="field"><label for="s_theme">主題</label>
+            <select id="s_theme" name="theme">
+              ${[['system', '跟隨系統'], ['light', '淺色'], ['dark', '深色']].map(([v, l]) => `<option value="${v}" ${s.theme === v ? 'selected' : ''}>${l}</option>`).join('')}
+            </select></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head"><h2>瀏覽器提醒</h2><span class="small muted">${s.notify && perm === 'granted' ? '已開啟' : '未開啟'}</span></div>
+          <p style="margin-top:0">工作台開著的時候，任務到期、該追回覆、例行事項到期會跳出通知，每件事一天只提醒一次。關掉分頁就不會提醒，所以重要的日期建議同步到 Google 日曆。</p>
+          <div class="actions">
+            ${s.notify && perm === 'granted' ? '<button type="button" class="btn" data-act="notify-off">關閉提醒</button><button type="button" class="btn ghost" data-act="notify-test">現在檢查一次</button>'
+              : `<button type="button" class="btn primary" data-act="notify-on" ${perm === 'unsupported' ? 'disabled' : ''}>開啟提醒</button>`}
+          </div>
+          ${perm === 'denied' ? '<p class="hint">瀏覽器目前封鎖了通知，請在網址列左邊的網站設定裡改成「允許」。</p>' : ''}
+        </section>
+
+        <section class="panel">
+          <h2>Google 日曆</h2>
+          <div class="field"><label for="s_gid">OAuth Client ID</label>
+            <input type="text" id="s_gid" name="googleClientId" value="${esc(s.googleClientId)}" placeholder="xxxxxxxx.apps.googleusercontent.com">
+            <div class="hint">在 Google Cloud Console 建立「網頁應用程式」類型的 OAuth 用戶端，已授權的 JavaScript 來源填：<span class="mono">${esc(origin)}</span></div></div>
+          <div class="field"><label for="s_gcal">日曆 ID</label>
+            <input type="text" id="s_gcal" name="gcalCalendarId" value="${esc(s.gcalCalendarId)}" placeholder="primary">
+            <div class="hint">建議另外建一個「策略 PMO」日曆，把它的日曆 ID 貼在這裡。填 primary 會寫進主要日曆。</div></div>
+        </section>
+
+        <section class="panel">
+          <h2>AI 服務</h2>
+          <div class="field"><label for="s_provider">服務類型</label>
+            <select id="s_provider" name="aiProvider">
+              <option value="claude" ${isClaude ? 'selected' : ''}>Claude（Anthropic）</option>
+              <option value="openai" ${!isClaude ? 'selected' : ''}>OpenAI 相容格式（OpenAI、Azure、Gemini、公司閘道、Ollama）</option>
+            </select></div>
+
+          <div id="claude-fields" ${isClaude ? '' : 'hidden'}>
+            <div class="field"><label for="s_key">Claude API key</label>
+              <input type="password" id="s_key" name="claudeKey" value="${esc(s.claudeKey)}" placeholder="sk-ant-…" autocomplete="off">
+              <div class="hint">到 console.anthropic.com 建立，建議設定每月用量上限。</div></div>
+            <div class="field"><label for="s_model">模型</label>
+              <input type="text" id="s_model" name="claudeModel" value="${esc(s.claudeModel)}"></div>
+          </div>
+
+          <div id="openai-fields" ${isClaude ? 'hidden' : ''}>
+            <div class="field"><label>快速套用</label>
+              <div class="chips">${Object.keys(PMO.ai.PRESETS).map(k => `<button type="button" class="chip" data-act="preset" data-k="${k}">${esc(PMO.ai.PRESETS[k].label)}</button>`).join('')}</div>
+              <div class="hint">套用後再把網址裡的「你的資源」「你的部署名稱」換成公司給你的資料。</div></div>
+            <div class="field"><label for="s_ourl">端點網址（chat completions）</label>
+              <input type="url" id="s_ourl" name="openaiUrl" value="${esc(s.openaiUrl)}"></div>
+            <div class="field-row">
+              <div class="field"><label for="s_oauth">驗證方式</label>
+                <select id="s_oauth" name="openaiAuth">
+                  ${[['bearer', 'Authorization: Bearer（OpenAI、Gemini）'], ['api-key', 'api-key 標頭（Azure）'], ['none', '不需要（本機 Ollama）']].map(([v, l]) => `<option value="${v}" ${s.openaiAuth === v ? 'selected' : ''}>${l}</option>`).join('')}
+                </select></div>
+              <div class="field"><label for="s_omodel">模型名稱</label>
+                <input type="text" id="s_omodel" name="openaiModel" value="${esc(s.openaiModel)}" placeholder="Azure 可留空"></div>
+            </div>
+            <div class="field"><label for="s_okey">API key</label>
+              <input type="password" id="s_okey" name="openaiKey" value="${esc(s.openaiKey)}" autocomplete="off"></div>
+            <div class="hint">從瀏覽器直接呼叫時，服務必須允許跨網域（CORS）。OpenAI、Gemini 一般可以；公司的 Azure 或內部閘道要問 IT 是否開放。</div>
+          </div>
+
+          <div class="field" style="margin-top:12px"><label for="s_note">給 AI 的補充背景</label>
+            <textarea id="s_note" name="aiSystemNote" placeholder="例如：主管偏好結論先講、一頁報告；我正在練習說話力道從輕開始。">${esc(s.aiSystemNote)}</textarea>
+            <div class="hint">每次諮詢都會附上這段文字，不要放機密。</div></div>
+        </section>
+
+        <div class="actions"><button class="btn primary" type="submit">儲存設定</button>
+          <button class="btn ghost" type="button" data-act="forget-key">清除所有 AI 金鑰</button></div>
+      </form>`;
+    return { title: '設定', html };
+  }
+
+  function mount(root) {
+    const f = root.querySelector('#settings-form');
+    f.elements.aiProvider.onchange = e => {
+      const claude = e.target.value === 'claude';
+      root.querySelector('#claude-fields').hidden = !claude;
+      root.querySelector('#openai-fields').hidden = claude;
+    };
+    f.onsubmit = e => {
+      e.preventDefault();
+      ['theme', 'googleClientId', 'gcalCalendarId', 'aiProvider', 'claudeKey', 'claudeModel', 'openaiUrl', 'openaiAuth', 'openaiModel', 'openaiKey', 'aiSystemNote']
+        .forEach(k => { S.settings[k] = f.elements[k].value.trim(); });
+      if (!S.settings.gcalCalendarId) S.settings.gcalCalendarId = 'primary';
+      if (!S.settings.claudeModel) S.settings.claudeModel = 'claude-sonnet-5-5';
+      S.saveSettings();
+      PMO.app.applyTheme();
+      ui.toast('已儲存設定');
+    };
+    root.onclick = async e => {
+      const a = e.target.closest('[data-act]');
+      if (!a) return;
+      const act = a.dataset.act;
+      if (act === 'preset') {
+        const p = PMO.ai.PRESETS[a.dataset.k];
+        f.elements.openaiUrl.value = p.url; f.elements.openaiModel.value = p.model; f.elements.openaiAuth.value = p.auth;
+        ui.toast('已套用 ' + p.label + '，記得按儲存');
+      }
+      if (act === 'forget-key') { S.settings.claudeKey = ''; S.settings.openaiKey = ''; S.saveSettings(); ui.toast('已清除 AI 金鑰'); PMO.app.render(); }
+      if (act === 'notify-on') {
+        try { await PMO.notify.enable(); ui.toast('已開啟提醒'); } catch (err) { ui.toast(err.message); }
+        PMO.app.render();
+      }
+      if (act === 'notify-off') { PMO.notify.disable(); ui.toast('已關閉提醒'); PMO.app.render(); }
+      if (act === 'notify-test') {
+        const n = PMO.notify.dueItems().length;
+        try { localStorage.removeItem('pmo.notified'); } catch (_) { /* ignore */ } PMO.notify.check();
+        ui.toast(n ? '有 ' + n + ' 件到期，已送出通知' : '目前沒有到期的事');
+      }
+    };
+  }
+
+  return { render, mount };
+})();
+
+</script>
+  <script>
+/* ---- js/app.js ---- */
+/* Router and app shell. Routes: #/today (home), #/dashboard, #/tasks, #/followups, #/routines, #/indicators, #/bu/:id, #/project/:id,
+   #/questions, #/wins, #/rituals, #/ai, #/calendar, #/connectors, #/backup, #/settings */
+PMO.app = (function () {
+  const S = PMO.store;
+  const { esc } = PMO.util;
+  const root = document.getElementById('view');
+  const nav = document.getElementById('nav');
+  const menuBtn = document.getElementById('menu-btn');
+
+  function parse() {
+    const parts = (location.hash.replace(/^#\/?/, '') || 'today').split('/');
+    const name = parts[0];
+    if (name === 'bu') return { view: 'bu', params: { id: decodeURIComponent(parts[1] || '') } };
+    if (name === 'project') return { view: 'project', params: { id: decodeURIComponent(parts[1] || '') } };
+    return { view: PMO.views[name] ? name : 'today', params: {} };
+  }
+
+  function renderNav(route) {
+    document.getElementById('nav-bus').innerHTML = S.activeBus().map(b =>
+      `<a href="#/bu/${esc(b.id)}" data-bu="${esc(b.id)}"><span class="dot" style="background:${esc(b.color)}"></span>${esc(b.name)}</a>`).join('');
+    let activeBu = null;
+    if (route.view === 'bu') activeBu = route.params.id;
+    if (route.view === 'project') { const p = S.project(route.params.id); activeBu = p && p.buId; }
+    nav.querySelectorAll('a').forEach(a => {
+      const on = (a.dataset.nav && a.dataset.nav === route.view) || (a.dataset.bu && a.dataset.bu === activeBu);
+      a.classList.toggle('active', !!on);
+      if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+    });
+  }
+
+  function renderBackupHint() {
+    const days = PMO.backup.daysSinceBackup();
+    const el = document.getElementById('backup-hint');
+    if (days == null || days >= 7) {
+      el.innerHTML = `<a href="#/backup">${days == null ? '還沒備份過' : days + ' 天沒備份'}</a>`;
+    } else el.innerHTML = '';
+  }
+
+  function render() {
+    const route = parse();
+    const view = PMO.views[route.view];
+    let out;
+    try {
+      out = view.render(route.params);
+    } catch (e) {
+      console.error(e);
+      out = { title: '發生錯誤', html: `<div class="notice"><b>這一頁無法顯示。</b> ${esc(e.message)}。可以先到「備份與匯出」下載備份。</div>` };
+    }
+    // Keep scroll position when re-rendering the same route.
+    const sameRoute = root.dataset.route === location.hash;
+    const y = window.scrollY;
+    root.onclick = null; root.onchange = null;
+    root.innerHTML = out.html;
+    root.dataset.route = location.hash;
+    document.getElementById('topbar-title').textContent = out.title;
+    document.title = out.title === '今天' ? '策略 PMO 工作台' : out.title + '・策略 PMO';
+    renderNav(route);
+    renderBackupHint();
+    if (view.mount) view.mount(root, route.params);
+    if (sameRoute) window.scrollTo(0, y); else window.scrollTo(0, 0);
+  }
+
+  function applyTheme() {
+    const t = S.settings.theme;
+    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+    else document.documentElement.removeAttribute('data-theme');
+  }
+
+  function closeMenu() { nav.classList.remove('open'); menuBtn.setAttribute('aria-expanded', 'false'); }
+
+  menuBtn.onclick = () => {
+    const open = !nav.classList.contains('open');
+    nav.classList.toggle('open', open);
+    menuBtn.setAttribute('aria-expanded', String(open));
+  };
+  nav.addEventListener('click', async e => {
+    if (e.target.closest('a')) closeMenu();
+    if (e.target.closest('[data-action="bu-new"]')) {
+      closeMenu();
+      const b = await PMO.edit.bu();
+      if (b) location.hash = '#/bu/' + b.id;
+    }
+  });
+  window.addEventListener('hashchange', render);
+  window.addEventListener('storage', e => { if (e.key === 'pmo.data') location.reload(); });
+
+  applyTheme();
+  if (PMO.notify) PMO.notify.start();
+  return { render, applyTheme };
+})();
+
+PMO.app.render();
+
+</script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+# Exported data — never commit your own records
+pmo-backup-*.json
+pmo-*.csv
+pmo-*.ics
+成果紀錄-*.md
+*.local.json
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+node_modules/
