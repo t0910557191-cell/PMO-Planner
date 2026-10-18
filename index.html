@@ -432,6 +432,14 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
 
 .week-day.is-empty { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; padding-bottom: 6px; }
 
+/* 各國假期 */
+.holiday-tools { margin-bottom: 10px; align-items: center; }
+.holiday-tools select { max-width: 100%; }
+.holiday-panel .chips { margin-bottom: 10px; }
+.holiday-list li.past { opacity: .55; }
+.holiday-list .date { font: inherit; background: none; border: 0; padding: 0; cursor: pointer; color: var(--accent); min-width: 5.5em; text-align: left; }
+.holiday-note { margin: 0 0 8px; font-size: .9rem; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
 </style>
 </head>
 <body>
@@ -963,6 +971,71 @@ PMO.quotesData = (function () {
 
   return { SOURCES, LIST };
 })();
+
+</script>
+  <script>
+/* ---- js/holidays-data.js ---- */
+/* Google's public holiday calendars, one per country or region.
+   Calendar ID = 'zh-tw.' + region + '#holiday@group.v.calendar.google.com' (names come back in Traditional Chinese).
+   Each entry: [region id used by Google, display name, group]. Group = heading in the menu. */
+PMO.holidaysData = [
+  // 常用
+  ['taiwan', '台灣', '常用'], ['china', '中國', '常用'], ['hong_kong', '香港', '常用'], ['japanese', '日本', '常用'], ['south_korea', '南韓', '常用'],
+  ['usa', '美國', '常用'], ['vietnamese', '越南', '常用'], ['singapore', '新加坡', '常用'], ['malaysia', '馬來西亞', '常用'], ['th', '泰國', '常用'],
+  ['indian', '印度', '常用'], ['german', '德國', '常用'], ['uk', '英國', '常用'], ['mexican', '墨西哥', '常用'], ['philippines', '菲律賓', '常用'],
+  ['indonesian', '印尼', '常用'],
+  // 亞洲
+  ['mo', '澳門', '亞洲'], ['mn', '蒙古', '亞洲'], ['kh', '柬埔寨', '亞洲'], ['la', '寮國', '亞洲'], ['mm', '緬甸', '亞洲'],
+  ['bn', '汶萊', '亞洲'], ['tl', '東帝汶', '亞洲'], ['bd', '孟加拉', '亞洲'], ['lk', '斯里蘭卡', '亞洲'], ['np', '尼泊爾', '亞洲'],
+  ['bt', '不丹', '亞洲'], ['mv', '馬爾地夫', '亞洲'], ['pk', '巴基斯坦', '亞洲'], ['af', '阿富汗', '亞洲'], ['kz', '哈薩克', '亞洲'],
+  ['uz', '烏茲別克', '亞洲'], ['kg', '吉爾吉斯', '亞洲'], ['tj', '塔吉克', '亞洲'], ['tm', '土庫曼', '亞洲'], ['kp', '北韓', '亞洲'],
+  ['ae', '阿拉伯聯合大公國', '亞洲'], ['saudiarabian', '沙烏地阿拉伯', '亞洲'], ['qa', '卡達', '亞洲'], ['kw', '科威特', '亞洲'], ['bh', '巴林', '亞洲'],
+  ['om', '阿曼', '亞洲'], ['ye', '葉門', '亞洲'], ['jo', '約旦', '亞洲'], ['lb', '黎巴嫩', '亞洲'], ['sy', '敘利亞', '亞洲'],
+  ['iq', '伊拉克', '亞洲'], ['ir', '伊朗', '亞洲'], ['jewish', '以色列', '亞洲'], ['turkish', '土耳其', '亞洲'], ['cy', '賽普勒斯', '亞洲'],
+  ['ge', '喬治亞', '亞洲'], ['am', '亞美尼亞', '亞洲'], ['az', '亞塞拜然', '亞洲'],
+  // 大洋洲
+  ['australian', '澳洲', '大洋洲'], ['new_zealand', '紐西蘭', '大洋洲'], ['fj', '斐濟', '大洋洲'], ['pg', '巴布亞紐幾內亞', '大洋洲'], ['sb', '索羅門群島', '大洋洲'],
+  ['vu', '萬那杜', '大洋洲'], ['ws', '薩摩亞', '大洋洲'], ['to', '東加', '大洋洲'], ['ki', '吉里巴斯', '大洋洲'], ['tv', '吐瓦魯', '大洋洲'],
+  ['nr', '諾魯', '大洋洲'], ['pw', '帛琉', '大洋洲'], ['mh', '馬紹爾群島', '大洋洲'], ['fm', '密克羅尼西亞', '大洋洲'], ['gu', '關島', '大洋洲'],
+  ['mp', '北馬里亞納群島', '大洋洲'], ['as', '美屬薩摩亞', '大洋洲'], ['ck', '庫克群島', '大洋洲'], ['nc', '新喀里多尼亞', '大洋洲'], ['pf', '法屬玻里尼西亞', '大洋洲'],
+  ['wf', '瓦利斯和富圖納', '大洋洲'],
+  // 歐洲
+  ['french', '法國', '歐洲'], ['italian', '義大利', '歐洲'], ['spain', '西班牙', '歐洲'], ['portuguese', '葡萄牙', '歐洲'], ['dutch', '荷蘭', '歐洲'],
+  ['be', '比利時', '歐洲'], ['lu', '盧森堡', '歐洲'], ['ch', '瑞士', '歐洲'], ['austrian', '奧地利', '歐洲'], ['irish', '愛爾蘭', '歐洲'],
+  ['danish', '丹麥', '歐洲'], ['swedish', '瑞典', '歐洲'], ['norwegian', '挪威', '歐洲'], ['finnish', '芬蘭', '歐洲'], ['is', '冰島', '歐洲'],
+  ['polish', '波蘭', '歐洲'], ['czech', '捷克', '歐洲'], ['slovak', '斯洛伐克', '歐洲'], ['hungarian', '匈牙利', '歐洲'], ['romanian', '羅馬尼亞', '歐洲'],
+  ['bulgarian', '保加利亞', '歐洲'], ['greek', '希臘', '歐洲'], ['croatian', '克羅埃西亞', '歐洲'], ['slovenian', '斯洛維尼亞', '歐洲'], ['rs', '塞爾維亞', '歐洲'],
+  ['ba', '波士尼亞與赫塞哥維納', '歐洲'], ['me', '蒙特內哥羅', '歐洲'], ['mk', '北馬其頓', '歐洲'], ['al', '阿爾巴尼亞', '歐洲'], ['xk', '科索沃', '歐洲'],
+  ['ee', '愛沙尼亞', '歐洲'], ['latvian', '拉脫維亞', '歐洲'], ['lithuanian', '立陶宛', '歐洲'], ['ukrainian', '烏克蘭', '歐洲'], ['by', '白俄羅斯', '歐洲'],
+  ['md', '摩爾多瓦', '歐洲'], ['russian', '俄羅斯', '歐洲'], ['mt', '馬爾他', '歐洲'], ['mc', '摩納哥', '歐洲'], ['li', '列支敦斯登', '歐洲'],
+  ['ad', '安道爾', '歐洲'], ['sm', '聖馬利諾', '歐洲'], ['va', '梵蒂岡', '歐洲'], ['gi', '直布羅陀', '歐洲'], ['im', '曼島', '歐洲'],
+  ['je', '澤西', '歐洲'], ['gg', '根西', '歐洲'], ['fo', '法羅群島', '歐洲'], ['gl', '格陵蘭', '歐洲'],
+  // 美洲
+  ['canadian', '加拿大', '美洲'], ['brazilian', '巴西', '美洲'], ['ar', '阿根廷', '美洲'], ['cl', '智利', '美洲'], ['co', '哥倫比亞', '美洲'],
+  ['pe', '秘魯', '美洲'], ['ve', '委內瑞拉', '美洲'], ['ec', '厄瓜多', '美洲'], ['bo', '玻利維亞', '美洲'], ['py', '巴拉圭', '美洲'],
+  ['uy', '烏拉圭', '美洲'], ['gy', '蓋亞那', '美洲'], ['sr', '蘇利南', '美洲'], ['gf', '法屬圭亞那', '美洲'], ['fk', '福克蘭群島', '美洲'],
+  ['gt', '瓜地馬拉', '美洲'], ['bz', '貝里斯', '美洲'], ['hn', '宏都拉斯', '美洲'], ['sv', '薩爾瓦多', '美洲'], ['ni', '尼加拉瓜', '美洲'],
+  ['cr', '哥斯大黎加', '美洲'], ['pa', '巴拿馬', '美洲'], ['cu', '古巴', '美洲'], ['jm', '牙買加', '美洲'], ['ht', '海地', '美洲'],
+  ['do', '多明尼加', '美洲'], ['pr', '波多黎各', '美洲'], ['bs', '巴哈馬', '美洲'], ['bb', '巴貝多', '美洲'], ['tt', '千里達及托巴哥', '美洲'],
+  ['ag', '安地卡及巴布達', '美洲'], ['dm', '多米尼克', '美洲'], ['gd', '格瑞那達', '美洲'], ['kn', '聖克里斯多福及尼維斯', '美洲'], ['lc', '聖露西亞', '美洲'],
+  ['vc', '聖文森及格瑞那丁', '美洲'], ['aw', '阿魯巴', '美洲'], ['cw', '古拉索', '美洲'], ['sx', '荷屬聖馬丁', '美洲'], ['mf', '法屬聖馬丁', '美洲'],
+  ['bl', '聖巴瑟米', '美洲'], ['gp', '瓜地洛普', '美洲'], ['mq', '馬丁尼克', '美洲'], ['ai', '安圭拉', '美洲'], ['bm', '百慕達', '美洲'],
+  ['ky', '開曼群島', '美洲'], ['tc', '土克凱可群島', '美洲'], ['vg', '英屬維京群島', '美洲'], ['vi', '美屬維京群島', '美洲'], ['ms', '蒙哲臘', '美洲'],
+  ['pm', '聖皮耶與密克隆', '美洲'],
+  // 非洲
+  ['sa', '南非', '非洲'], ['eg', '埃及', '非洲'], ['ma', '摩洛哥', '非洲'], ['dz', '阿爾及利亞', '非洲'], ['tn', '突尼西亞', '非洲'],
+  ['ly', '利比亞', '非洲'], ['sd', '蘇丹', '非洲'], ['ss', '南蘇丹', '非洲'], ['et', '衣索比亞', '非洲'], ['er', '厄利垂亞', '非洲'],
+  ['dj', '吉布地', '非洲'], ['so', '索馬利亞', '非洲'], ['ke', '肯亞', '非洲'], ['ug', '烏干達', '非洲'], ['tz', '坦尚尼亞', '非洲'],
+  ['rw', '盧安達', '非洲'], ['bi', '蒲隆地', '非洲'], ['ng', '奈及利亞', '非洲'], ['gh', '迦納', '非洲'], ['ci', '象牙海岸', '非洲'],
+  ['sn', '塞內加爾', '非洲'], ['ml', '馬利', '非洲'], ['bf', '布吉納法索', '非洲'], ['ne', '尼日', '非洲'], ['td', '查德', '非洲'],
+  ['cm', '喀麥隆', '非洲'], ['cf', '中非', '非洲'], ['ga', '加彭', '非洲'], ['gq', '赤道幾內亞', '非洲'], ['cg', '剛果共和國', '非洲'],
+  ['cd', '剛果民主共和國', '非洲'], ['ao', '安哥拉', '非洲'], ['zm', '尚比亞', '非洲'], ['zw', '辛巴威', '非洲'], ['mw', '馬拉威', '非洲'],
+  ['mz', '莫三比克', '非洲'], ['na', '納米比亞', '非洲'], ['bw', '波札那', '非洲'], ['ls', '賴索托', '非洲'], ['sz', '史瓦帝尼', '非洲'],
+  ['mg', '馬達加斯加', '非洲'], ['mu', '模里西斯', '非洲'], ['sc', '塞席爾', '非洲'], ['km', '葛摩', '非洲'], ['re', '留尼旺', '非洲'],
+  ['yt', '馬約特', '非洲'], ['cv', '維德角', '非洲'], ['st', '聖多美普林西比', '非洲'], ['gm', '甘比亞', '非洲'], ['gn', '幾內亞', '非洲'],
+  ['gw', '幾內亞比索', '非洲'], ['sl', '獅子山', '非洲'], ['lr', '賴比瑞亞', '非洲'], ['tg', '多哥', '非洲'], ['bj', '貝南', '非洲'],
+  ['mr', '茅利塔尼亞', '非洲'], ['sh', '聖赫勒拿', '非洲']
+];
 
 </script>
   <script>
@@ -1764,13 +1837,14 @@ PMO.gcal = (function () {
     }
     return {
       id: e.id, title: e.summary || '（無標題）', start: raw, date, time, allDay,
+      end: allDay && e.end ? e.end.date : '', description: e.description || '',
       fromPmo: !!(e.extendedProperties && e.extendedProperties.private && e.extendedProperties.private.pmoId),
       link: e.htmlLink
     };
   }
 
-  /* Events between two local dates (inclusive). */
-  async function range(fromDate, toDate) {
+  /* Events between two local dates (inclusive), from the chosen calendar or another one you can read (e.g. a public holiday calendar). */
+  async function range(fromDate, toDate, calendarId) {
     const start = new Date(fromDate + 'T00:00:00');
     const end = new Date(toDate + 'T23:59:59');
     const out = [];
@@ -1778,7 +1852,7 @@ PMO.gcal = (function () {
     for (let i = 0; i < 5; i++) {
       const q = '?singleEvents=true&orderBy=startTime&maxResults=250&timeMin=' + encodeURIComponent(start.toISOString()) +
         '&timeMax=' + encodeURIComponent(end.toISOString()) + (pageToken ? '&pageToken=' + encodeURIComponent(pageToken) : '');
-      const res = await call('GET', '/calendars/' + calId() + '/events' + q);
+      const res = await call('GET', '/calendars/' + (calendarId ? encodeURIComponent(calendarId) : calId()) + '/events' + q);
       (res.items || []).forEach(e => { if (e.status !== 'cancelled') out.push(toEvent(e)); });
       if (!res.nextPageToken) break;
       pageToken = res.nextPageToken;
@@ -1789,6 +1863,92 @@ PMO.gcal = (function () {
   async function upcoming(days) { return range(today(), addDays(today(), days || 14)); }
 
   return { prepare, ready, signIn, signOut, connected, sync, removeAll, items, upcoming, range };
+})();
+
+</script>
+  <script>
+/* ---- js/services/holidays.js ---- */
+/* Public holidays from Google's holiday calendars, one country at a time.
+   Reading them needs the Google connection once; each country's year is then kept in this browser for 30 days,
+   so the list still shows after the hour-long Google sign-in expires. */
+PMO.holidays = (function () {
+  const S = PMO.store;
+  const { addDays } = PMO.util;
+  const CACHE_KEY = 'pmo.holidays';
+  const KEEP_DAYS = 30;
+  const OFF = /國定假日|公眾假期|法定假日|public holiday/i;
+  const loading = {};
+  const failed = {};
+
+  function readCache() { try { return JSON.parse(localStorage.getItem(CACHE_KEY) || '{}'); } catch (e) { return {}; } }
+  function writeCache(c) { try { localStorage.setItem(CACHE_KEY, JSON.stringify(c)); } catch (e) { /* storage full or blocked: just skip */ } }
+
+  function calendarId(region) { return 'zh-tw.' + region + '#holiday@group.v.calendar.google.com'; }
+  function regions() { return PMO.holidaysData; }
+  function nameOf(region) { const r = PMO.holidaysData.find(x => x[0] === region); return r ? r[1] : region; }
+
+  function current() { return S.settings.holidayRegion || ''; }
+  function setCurrent(region) { S.settings.holidayRegion = region; S.saveSettings(); }
+  function pins() { return (S.settings.holidayPins || []).filter(r => PMO.holidaysData.some(x => x[0] === r)); }
+  function togglePin(region) {
+    const list = pins();
+    S.settings.holidayPins = list.includes(region) ? list.filter(r => r !== region) : list.concat(region).slice(-8);
+    S.saveSettings();
+  }
+
+  /* Cached list for one country and year, or null when it has not been read yet. */
+  function cached(region, year) {
+    const hit = readCache()[region + '|' + year];
+    return hit ? hit.items : null;
+  }
+  function fresh(region, year) {
+    const hit = readCache()[region + '|' + year];
+    return hit && Date.now() - hit.at < KEEP_DAYS * 864e5;
+  }
+
+  function toItems(events) {
+    const out = [];
+    events.forEach(e => {
+      if (!e.date) return;
+      const off = OFF.test(e.description || '');
+      // A holiday that spans several days arrives as one event; list each day.
+      let d = e.date;
+      const last = e.end ? addDays(e.end, -1) : d;
+      for (let i = 0; d <= last && i < 14; i++, d = addDays(d, 1)) out.push({ date: d, title: e.title, off });
+    });
+    return out.sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  /* Reads one country's year from Google if needed. Calls done() when something changed. */
+  function ensure(region, year, done) {
+    const key = region + '|' + year;
+    if (!region || fresh(region, year) || loading[key] || failed[key] || !PMO.gcal.connected()) return;
+    loading[key] = true;
+    PMO.gcal.range(year + '-01-01', year + '-12-31', calendarId(region))
+      .then(evs => {
+        const c = readCache();
+        c[key] = { at: Date.now(), items: toItems(evs) };
+        writeCache(c);
+      })
+      .catch(err => {
+        failed[key] = err.status === 404 ? 'Google 沒有提供這個地區的假期日曆。' : err.message;
+      })
+      .finally(() => { delete loading[key]; if (done) done(); });
+  }
+
+  function isLoading(region, year) { return !!loading[region + '|' + year]; }
+  function error(region, year) { return failed[region + '|' + year] || ''; }
+  function retry(region, year) {
+    delete failed[region + '|' + year];
+    const c = readCache(); delete c[region + '|' + year]; writeCache(c);
+  }
+
+  function on(region, date) {
+    const list = cached(region, date.slice(0, 4)) || [];
+    return list.filter(h => h.date === date);
+  }
+
+  return { regions, nameOf, current, setCurrent, pins, togglePin, cached, ensure, isLoading, error, retry, on };
 })();
 
 </script>
@@ -3656,6 +3816,9 @@ PMO.views.schedule = (function () {
   const gCache = {};                  // 'from|to' -> events
   let gLoading = false;
   let gError = '';
+  let hScope = 'month';               // holiday list: 'month' shown in the grid, or the whole 'year'
+  let hOnlyOff = false;               // only days off, no observances
+  let hOpen = null;                   // holiday panel open; null = open when a country is chosen
   let gFailedKey = '';               // range that last failed; not retried until 重新讀取日曆
 
   const ymd = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
@@ -3735,6 +3898,63 @@ PMO.views.schedule = (function () {
     return fmtDate(dt).slice(5) + '（週' + WD[(d.getDay() + 6) % 7] + '）' + (rel ? '・' + rel : '');
   }
 
+  /* 各國假期: its own panel with a country menu, kept out of the month grid. */
+  function holidayPanel(t) {
+    const H = PMO.holidays;
+    const region = H.current();
+    const open = hOpen == null ? !!region : hOpen;
+    const year = cursor.slice(0, 4);
+    const groups = [];
+    H.regions().forEach(([id, name, g]) => {
+      let grp = groups.find(x => x.g === g);
+      if (!grp) groups.push(grp = { g, list: [] });
+      grp.list.push([id, name]);
+    });
+    const menu = `<select id="h-region" aria-label="選擇國家或地區">
+        <option value="">不顯示假期</option>
+        ${groups.map(grp => `<optgroup label="${esc(grp.g)}">${grp.list.map(([id, name]) => `<option value="${esc(id)}" ${id === region ? 'selected' : ''}>${esc(name)}</option>`).join('')}</optgroup>`).join('')}
+      </select>`;
+    const pins = H.pins();
+    const chips = pins.length ? `<div class="chips">${pins.map(r => `<button type="button" class="chip ${r === region ? 'on' : ''}" data-act="h-pick" data-r="${esc(r)}">${esc(H.nameOf(r))}</button>`).join('')}</div>` : '';
+
+    let body = '';
+    if (!region) body = '<p class="empty">從選單選一個國家，就會列出那裡的假期。不會放進上面的月曆。</p>';
+    else {
+      const list = H.cached(region, year);
+      const err = H.error(region, year);
+      if (!list) {
+        body = H.isLoading(region, year) ? '<p class="empty">正在讀取假期…</p>'
+          : err ? `<p class="empty">讀不到假期：${esc(err)} <button class="btn sm ghost" data-act="h-retry">再試一次</button></p>`
+          : !S.settings.googleClientId ? '<p class="empty">假期是從 Google 的公開假期日曆讀的，要先到「設定」填 Google Client ID。</p>'
+          : '<p class="empty">假期是從 Google 的公開假期日曆讀的。連接一次 Google 之後，會記在這個瀏覽器 30 天。 <button class="btn sm" data-act="connect">連接 Google</button></p>';
+      } else {
+        const shown = list.filter(h => (hScope === 'year' || h.date.slice(0, 7) === cursor) && (!hOnlyOff || h.off));
+        body = shown.length ? `<ul class="list holiday-list">${shown.map(h => `<li class="${h.date < t ? 'past' : ''}">
+            <button type="button" class="date" data-act="h-day" data-d="${h.date}">${fmtDate(h.date).slice(5)}（${WD[(parseDate(h.date).getDay() + 6) % 7]}）</button>
+            <span class="grow">${esc(h.title)}</span>${h.off ? '<span class="pill tag">放假</span>' : ''}</li>`).join('')}</ul>`
+          : `<p class="empty">${hScope === 'year' ? year + ' 年' : Number(cursor.slice(5)) + ' 月'}沒有${hOnlyOff ? '放假的' : ''}假期。</p>`;
+      }
+    }
+
+    return `<section class="panel holiday-panel">
+      <div class="panel-head"><h2>各國假期${region ? '・' + esc(H.nameOf(region)) : ''}</h2>
+        <button class="btn sm ghost" data-act="h-toggle" aria-expanded="${open}">${open ? '收起' : '展開'}</button></div>
+      ${open ? `<div class="toolbar holiday-tools">
+          ${menu}
+          ${region ? `<button class="btn sm ghost" data-act="h-pin">${pins.includes(region) ? '取消常用' : '加到常用'}</button>` : ''}
+        </div>
+        ${chips}
+        ${region ? `<div class="toolbar holiday-tools">
+          <div class="seg" role="group" aria-label="範圍">
+            <button type="button" class="${hScope === 'month' ? 'on' : ''}" data-act="h-scope" data-s="month">${Number(cursor.slice(5))} 月</button>
+            <button type="button" class="${hScope === 'year' ? 'on' : ''}" data-act="h-scope" data-s="year">${year} 全年</button>
+          </div>
+          <label class="small"><input type="checkbox" id="h-off" ${hOnlyOff ? 'checked' : ''}> 只看放假日</label>
+        </div>` : ''}
+        ${body}` : ''}
+    </section>`;
+  }
+
   function render() {
     const t = today();
     const { start, end } = gridRange();
@@ -3766,6 +3986,11 @@ PMO.views.schedule = (function () {
       : !PMO.gcal.connected() ? '尚未連接 Google，所以沒有顯示 Google 日曆上的行程。'
       : gLoading ? '正在讀取 Google 日曆…' : gError ? 'Google 日曆讀取失敗：' + gError + ' 工作台裡的項目照常顯示。' : '';
 
+    const H = PMO.holidays;
+    const region = H.current();
+    const dh = region ? H.on(region, selected) : [];
+    const dayHolidays = dh.length ? `<p class="holiday-note"><span class="pill tag">${esc(H.nameOf(region))}假期</span> ${dh.map(h => esc(h.title)).join('、')}</p>` : '';
+
     const html = `
       <div class="page-head"><div><h1>行事曆</h1><p>工作台裡有日期的事情${PMO.gcal.connected() ? '和 Google 日曆上的行程' : ''}都在這裡。點一天看當天的安排。</p></div>
         <div class="actions">${S.settings.googleClientId && !PMO.gcal.connected() ? '<button class="btn" data-act="connect">連接 Google</button>' : ''}
@@ -3788,6 +4013,7 @@ PMO.views.schedule = (function () {
 
       <section class="panel">
         <div class="panel-head"><h2>${dayLabel(selected)}</h2><button class="btn sm" data-act="add-task">＋ 這天的任務</button></div>
+        ${dayHolidays}
         ${dayItems.length ? `<ul class="list">${dayItems.map(itemRow).join('')}</ul>` : '<p class="empty">這天沒有安排。</p>'}
       </section>
 
@@ -3805,18 +4031,30 @@ PMO.views.schedule = (function () {
             </div>`;
           }).join('')}
         </div>
-      </section>`;
+      </section>
+      ${holidayPanel(t)}`;
     return { title: '行事曆', html };
   }
 
   function mount(root) {
     PMO.gcal.prepare().catch(() => {});
     loadGoogle();
+    PMO.holidays.ensure(PMO.holidays.current(), cursor.slice(0, 4), () => { if (location.hash.startsWith('#/schedule')) PMO.app.render(); });
+    root.onchange = e => {
+      if (e.target.id === 'h-region') { PMO.holidays.setCurrent(e.target.value); hOpen = true; PMO.app.render(); }
+      if (e.target.id === 'h-off') { hOnlyOff = e.target.checked; PMO.app.render(); }
+    };
     root.onclick = async e => {
       if (await P.handle(e)) return;
       const a = e.target.closest('[data-act]');
       if (!a) return;
       const act = a.dataset.act;
+      if (act === 'h-toggle') { hOpen = !(hOpen == null ? !!PMO.holidays.current() : hOpen); PMO.app.render(); return; }
+      if (act === 'h-pick') { PMO.holidays.setCurrent(a.dataset.r); hOpen = true; PMO.app.render(); return; }
+      if (act === 'h-pin') { PMO.holidays.togglePin(PMO.holidays.current()); PMO.app.render(); return; }
+      if (act === 'h-scope') { hScope = a.dataset.s; PMO.app.render(); return; }
+      if (act === 'h-retry') { PMO.holidays.retry(PMO.holidays.current(), cursor.slice(0, 4)); PMO.app.render(); return; }
+      if (act === 'h-day') { selected = a.dataset.d; cursor = selected.slice(0, 7); weekShift = 0; PMO.app.render(); return; }
       if (act === 'wprev' || act === 'wnext') { weekShift += act === 'wnext' ? 1 : -1; PMO.app.render(); return; }
       if (act === 'pick') { weekShift = 0; selected = a.dataset.d; if (selected.slice(0, 7) !== cursor) cursor = selected.slice(0, 7); PMO.app.render(); }
       if (act === 'prev' || act === 'next') {
