@@ -1,4 +1,4 @@
-# 策略 PMO 工作台
+# PMO Planner
 
 個人用的工作台：幫你**記下來、排優先順序、到期提醒、追蹤別人的回覆、看指標燈號、累積成果**。純前端，不用安裝，放上 GitHub Pages 就能用。
 
@@ -75,7 +75,7 @@ python3 -m http.server 8080
    - GitHub Pages：`https://你的帳號.github.io`
    - 本機：`http://localhost:8080`
 5. 複製 Client ID，貼到工具的「設定」。
-6. 建議在 Google 日曆另外建一個「策略 PMO」日曆，把它的日曆 ID 貼到設定。
+6. 建議在 Google 日曆另外建一個「PMO Planner」日曆，把它的日曆 ID 貼到設定。
 7. 到「Google 日曆」頁按「連接 Google」，再按同步。
 
 同步規則：再同步一次會更新既有事件；在日曆上刪掉的事件下次會重建；在工具裡刪掉的項目不會自動刪日曆事件。授權範圍是 `calendar.events`，約一小時過期，到時再按一次連接即可。

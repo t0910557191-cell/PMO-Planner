@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>策略 PMO 工作台</title>
-  <meta name="description" content="個人用的策略 PMO 工作台：快速記錄、排優先順序、追蹤回覆、例行事項、領先與落後指標、成果紀錄、Google 日曆同步與 AI 諮詢。">
+  <title>PMO Planner</title>
+  <meta name="description" content="個人用的 PMO Planner：快速記錄、排優先順序、追蹤回覆、例行事項、領先與落後指標、成果紀錄、Google 日曆同步與 AI 諮詢。">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;700&display=swap">
   <style>
-/* 策略 PMO 工作台
+/* PMO Planner
    Layout: left sidebar navigation + main column; collapses to a slide-in drawer under 860px. */
 :root {
   --bg: #eef1f0;
@@ -503,7 +503,7 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
       <div class="brand">
         <div class="brand-mark" aria-hidden="true">P</div>
         <div>
-          <div class="brand-name">策略 PMO</div>
+          <div class="brand-name">PMO Planner</div>
           <div class="brand-sub">工作台</div>
         </div>
       </div>
@@ -1749,7 +1749,7 @@ PMO.backup = (function () {
   function icsDate(d) { return d.replace(/-/g, ''); }
 
   function buildICS() {
-    const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//strategy-pmo//ZH-TW', 'CALSCALE:GREGORIAN', 'X-WR-CALNAME:策略 PMO'];
+    const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//strategy-pmo//ZH-TW', 'CALSCALE:GREGORIAN', 'X-WR-CALNAME:PMO Planner'];
     const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
     S.allMilestones().forEach(({ m, p, b }) => {
       if (!m.date) return;
@@ -1933,7 +1933,7 @@ PMO.gcal = (function () {
   function eventFor(item) {
     return {
       summary: item.summary + (item.done ? ' ✓' : ''),
-      description: (item.description ? item.description + '\n\n' : '') + '由策略 PMO 工作台同步。',
+      description: (item.description ? item.description + '\n\n' : '') + '由 PMO Planner同步。',
       start: { date: item.date },
       end: { date: addDays(item.date, 1) },
       colorId: item.done ? '8' : undefined,
@@ -2795,7 +2795,7 @@ PMO.notify = (function () {
     const fresh = dueItems().filter(i => !s.ids.includes(i.id));
     if (!fresh.length) return;
     if (fresh.length > 3) {
-      show({ title: '策略 PMO：今天有 ' + fresh.length + ' 件事要處理', body: fresh.slice(0, 3).map(i => i.body).join('、') + '…', hash: '#/today' });
+      show({ title: 'PMO Planner：今天有 ' + fresh.length + ' 件事要處理', body: fresh.slice(0, 3).map(i => i.body).join('、') + '…', hash: '#/today' });
     } else fresh.forEach(show);
     s.ids = s.ids.concat(fresh.map(i => i.id));
     markSeen(s);
@@ -4527,7 +4527,7 @@ PMO.views.settings = (function () {
             </div></div>
           <div class="field"><label for="s_gcal">日曆 ID</label>
             <input type="text" id="s_gcal" name="gcalCalendarId" value="${esc(s.gcalCalendarId)}" placeholder="primary">
-            <div class="hint">建議另外建一個「策略 PMO」日曆，把它的日曆 ID 貼在這裡。填 primary 會寫進主要日曆。</div></div>
+            <div class="hint">建議另外建一個「PMO Planner」日曆，把它的日曆 ID 貼在這裡。填 primary 會寫進主要日曆。</div></div>
         </section>
 
         <section class="panel">
@@ -5301,7 +5301,7 @@ PMO.app = (function () {
     root.innerHTML = out.html;
     root.dataset.route = location.hash;
     document.getElementById('topbar-title').textContent = out.title;
-    document.title = out.title === '今天' ? '策略 PMO 工作台' : out.title + '・策略 PMO';
+    document.title = out.title === '今天' ? 'PMO Planner' : out.title + '・PMO Planner';
     renderNav(route);
     renderBackupHint();
     if (view.mount) view.mount(root, route.params);
