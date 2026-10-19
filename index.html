@@ -519,6 +519,20 @@ input[type="time"]::-webkit-date-and-time-value { text-align: left; margin: 0; }
 .alert-bar .btn.ghost { background: transparent; }
 @media (max-width: 640px) { .alert-bar { position: fixed; left: 8px; right: 8px; top: calc(8px + env(safe-area-inset-top, 0px)); border-radius: 12px; } }
 
+/* Task steps */
+.task-link { color: inherit; text-decoration: none; }
+.task-link:hover { text-decoration: underline; color: var(--accent); }
+.steps-list .step { align-items: flex-start; }
+.step-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.step-title { border-color: transparent !important; background: transparent !important; padding-left: 4px !important; height: 34px !important; }
+.step-title:focus { border-color: var(--accent) !important; background: var(--bg) !important; }
+.step.is-done .step-title { text-decoration: line-through; color: var(--muted); }
+.step-actions .btn { padding-left: 8px; padding-right: 8px; }
+.step-add { display: flex; gap: 8px; align-items: flex-end; margin-top: 12px; }
+.step-add textarea { min-height: 40px; height: 40px; resize: vertical; }
+@media (max-width: 640px) { .step-add textarea { min-height: 44px; height: 44px; } }
+.row-meta .clip { max-width: 22em; display: inline-block; vertical-align: bottom; }
+
 </style>
 </head>
 <body>
@@ -563,7 +577,7 @@ input[type="time"]::-webkit-date-and-time-value { text-align: left; margin: 0; }
           <a href="#/backup" data-nav="backup">備份與匯出</a>
           <a href="#/settings" data-nav="settings">設定</a>
         </div>
-        <p class="nav-version">版本 10/19・時鐘提醒</p>
+        <p class="nav-version">版本 10/19・任務拆解</p>
       </nav>
     </aside>
 
@@ -820,7 +834,7 @@ PMO.store = (function () {
     const out = Object.assign(base, d || {});
     out.bus = arr(out.bus).map(b => Object.assign({ type: 'other', archived: false, owner: '', counterpart: '', notes: '', color: '#2f6b62' }, b));
     out.projects = arr(out.projects).map(p => Object.assign({ milestones: [], risks: [], kpis: [], logs: [], status: 'on', stage: '', owner: '', summary: '' }, p));
-    out.tasks = arr(out.tasks).map(t => Object.assign({ buId: '', due: '', importance: '', effort: '', status: 'todo', triaged: true, notes: '' }, t));
+    out.tasks = arr(out.tasks).map(t => Object.assign({ buId: '', due: '', importance: '', effort: '', status: 'todo', triaged: true, notes: '', subtasks: [] }, t));
     out.followups = arr(out.followups).map(f => Object.assign({ buId: '', channel: '', status: 'waiting', notes: '' }, f));
     out.routines = arr(out.routines).map(r => Object.assign({ buId: '', cadence: 'weekly', day: 1, lastDone: '', notes: '' }, r));
     out.indicators = arr(out.indicators).map(i => Object.assign({ buId: '', kind: 'lag', perspective: 'proc', unit: '', direction: 'up', target: null, warnPct: 10, driverOf: '', notes: '', values: [] }, i));
@@ -1550,15 +1564,24 @@ PMO.parts = (function () {
     return `<span class="date ${!done && n < 0 ? 'over' : ''}">${txt}</span>`;
   }
 
+  // "2/5・下一步：…" for tasks that were broken into steps
+  function stepsMeta(t) {
+    const st = t.subtasks || [];
+    if (!st.length) return '';
+    const done = st.filter(x => x.done).length;
+    const nxt = st.find(x => !x.done);
+    return `<span class="pill tag">步驟 ${done}/${st.length}</span>${nxt && t.status !== 'done' ? `<span class="small muted clip">下一步：${esc(nxt.title)}</span>` : ''}`;
+  }
+
   function taskRow(t, opts) {
     const o = opts || {};
     const done = t.status === 'done';
     return `<li>
       <input type="checkbox" class="check" data-act="task-toggle" data-id="${esc(t.id)}" ${done ? 'checked' : ''} aria-label="完成 ${esc(t.title)}">
       ${dueLabel(t.due, done, t.time)}
-      <span class="grow ${done ? 'done-text' : ''}">${esc(t.title)}
-        <span class="row-meta">${o.hideUnit ? '' : unitTag(t.buId)}${t.importance === 'H' ? '<span class="pill H">重要</span>' : ''}${t.status === 'doing' ? '<span class="pill tag">進行中</span>' : ''}${o.showScore ? `<span class="small muted mono">分數 ${S.taskScore(t)}</span>` : ''}</span></span>
-      <span class="row-actions"><button class="btn sm ghost" data-act="task-edit" data-id="${esc(t.id)}">${t.triaged === false ? '整理' : '編輯'}</button></span></li>`;
+      <span class="grow ${done ? 'done-text' : ''}"><a class="task-link" href="#/task/${esc(t.id)}">${esc(t.title)}</a>
+        <span class="row-meta">${stepsMeta(t)}${o.hideUnit ? '' : unitTag(t.buId)}${t.importance === 'H' ? '<span class="pill H">重要</span>' : ''}${t.status === 'doing' ? '<span class="pill tag">進行中</span>' : ''}${o.showScore ? `<span class="small muted mono">分數 ${S.taskScore(t)}</span>` : ''}</span></span>
+      <span class="row-actions">${!done && !(t.subtasks || []).length && t.triaged !== false ? `<a class="btn sm ghost" href="#/task/${esc(t.id)}">拆解</a>` : ''}<button class="btn sm ghost" data-act="task-edit" data-id="${esc(t.id)}">${t.triaged === false ? '整理' : '編輯'}</button></span></li>`;
   }
 
   function followRow(f, opts) {
@@ -1643,6 +1666,8 @@ PMO.parts = (function () {
       case 'task-toggle': {
         const t = find('tasks'); if (!t) return true;
         t.status = a.checked ? 'done' : 'todo'; t.doneOn = a.checked ? today() : '';
+        // A task made from a step keeps its step in the parent task in step
+        if (t.parentId) { const p = S.data.tasks.find(x => x.id === t.parentId); const st = p && (p.subtasks || []).find(x => x.taskId === t.id); if (st) st.done = a.checked; }
         S.save(); if (a.checked) ui.toast('完成：' + t.title);
         // Update in place so the list does not jump; the item moves to "done" next time the page is opened.
         const row = a.closest('li');
@@ -2894,7 +2919,48 @@ PMO.ai = (function () {
     };
   }
 
-  return { ask, snapshot, PRESETS, providerLabel, ready, extractActions, listModels, takeSwitch, pickModel };
+  /* One big task → small next actions, as JSON. */
+  async function breakdown({ task, extra }) {
+    const s = S.settings;
+    const claude = s.aiProvider === 'claude';
+    const unit = task.buId ? S.buName(task.buId) : '';
+    const prompt = [
+      '請把下面這件工作拆成具體的小步驟。',
+      '今天是 ' + today() + '。' + (task.due ? '截止日：' + task.due + (task.time ? ' ' + task.time : '') + '。' : '沒有截止日。'),
+      '原則：',
+      '- 3 到 10 步，照做的順序排；每一步是一個 15 到 90 分鐘內做得完的動作，動詞開頭，看了就知道要做什麼。',
+      '- 需要別人提供資料或確認的，獨立成一步，寫清楚找誰要什麼（例如「寄信請財務對口提供上月費用明細」）。',
+      '- 她是單位窗口，不替單位做決策：需要主管決定的地方，寫成「整理選項給主管決定」。',
+      '- 有截止日的話，幫每一步估一個建議完成日（YYYY-MM-DD），往前倒推、留緩衝，不要排在週末；沒有截止日就留空字串。',
+      '- 不要編造公司內部數字或細節，資訊不夠的地方寫成「確認…」的步驟。',
+      '只回覆一個 JSON 物件，不要其他文字，格式：',
+      '{"steps":[{"title":"…","minutes":30,"due":"","kind":"task"}],"first":"建議現在先做的那一步，一句話說明原因","questions":["如果有不清楚、值得先問清楚的事"]}',
+      'kind 用 "task"（自己做）或 "follow"（要等別人回覆）。',
+      '',
+      '【工作】' + task.title,
+      unit ? '【單位】' + unit : '',
+      task.notes ? '【備註】' + task.notes : '',
+      extra ? '【補充】' + extra : ''
+    ].filter(x => x !== '').join('\n');
+    const system = systemPrompt('') + '\n\n這次的任務是拆解工作，只回覆 JSON。';
+    const msgs = [{ role: 'user', content: prompt }];
+    const raw = await withFallback(() => claude ? askClaude(msgs, system, 2000) : askOpenAI(msgs, system, 2000));
+    let t = String(raw || '').replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
+    const a = t.indexOf('{'), b = t.lastIndexOf('}');
+    if (a < 0 || b < a) throw new Error('AI 沒有照格式回覆，請再試一次。');
+    let obj;
+    try { obj = JSON.parse(t.slice(a, b + 1)); } catch (e) { throw new Error('AI 回覆的格式有誤，請再試一次。'); }
+    const okDate = d => /^\d{4}-\d{2}-\d{2}$/.test(d || '') ? d : '';
+    return {
+      steps: (Array.isArray(obj.steps) ? obj.steps : []).filter(x => x && x.title).slice(0, 15).map(x => ({
+        title: String(x.title).trim(), minutes: Math.max(5, Math.min(240, Number(x.minutes) || 30)), due: okDate(x.due), kind: x.kind === 'follow' ? 'follow' : 'task'
+      })),
+      first: String(obj.first || ''),
+      questions: (Array.isArray(obj.questions) ? obj.questions : []).map(String).filter(Boolean).slice(0, 5)
+    };
+  }
+
+  return { ask, snapshot, breakdown, PRESETS, providerLabel, ready, extractActions, listModels, takeSwitch, pickModel };
 })();
 
 </script>
@@ -4094,6 +4160,217 @@ PMO.views.meeting = (function () {
       }
       if (act === 'add-picked') { addPicked(m); PMO.app.render(); return; }
       if (act === 'clear-result') { delete results[m.id]; PMO.app.render(); }
+    };
+  }
+
+  return { render, mount };
+})();
+
+</script>
+  <script>
+/* ---- js/views/task.js ---- */
+/* One task: its steps (a checklist inside the task), AI breakdown into small next actions,
+   and turning steps into separate tasks when they need their own date. */
+PMO.views = PMO.views || {};
+
+PMO.views.task = (function () {
+  const S = PMO.store;
+  const P = PMO.parts;
+  const { esc, uid, today, addDays, fmtDate } = PMO.util;
+  const ui = PMO.ui;
+  const results = {};     // task id -> { steps, first, questions }
+  const extras = {};      // task id -> extra notes typed for the AI
+  let busy = false;
+  let arranging = false;  // show move / promote / delete buttons on steps
+  let aiError = '';
+
+  const find = id => S.data.tasks.find(t => t.id === id);
+  const fmtMin = m => (m >= 60 ? (m / 60).toFixed(m % 60 ? 1 : 0) + ' 小時' : m + ' 分鐘');
+
+  function render(params) {
+    const t = find(params.id);
+    if (!t) return { title: '任務', html: '<div class="notice">找不到這個任務，可能已經刪除了。 <a href="#/tasks">回任務</a></div>' };
+    t.subtasks = t.subtasks || [];
+    const steps = t.subtasks;
+    const doneN = steps.filter(x => x.done).length;
+    const total = steps.reduce((n, x) => n + (Number(x.minutes) || 0), 0);
+    const left = steps.filter(x => !x.done).reduce((n, x) => n + (Number(x.minutes) || 0), 0);
+    const res = results[t.id];
+    const pct = steps.length ? Math.round(doneN / steps.length * 100) : 0;
+    const aiOk = PMO.ai.ready();
+
+    const stepRow = (x, i) => `<li class="step ${x.done ? 'is-done' : ''}">
+        <input type="checkbox" class="check" data-step-check="${i}" ${x.done ? 'checked' : ''} aria-label="完成這一步">
+        <div class="grow step-body">
+          <input type="text" class="step-title" data-step-title="${i}" value="${esc(x.title)}" aria-label="步驟內容">
+          <span class="row-meta">${x.minutes ? `<span class="small muted">約 ${fmtMin(x.minutes)}</span>` : ''}${x.due ? `<span class="small muted">建議 ${fmtDate(x.due).slice(5)}</span>` : ''}${x.taskId ? `<a class="small" href="#/task/${esc(x.taskId)}">已變成任務</a>` : ''}</span>
+        </div>
+        ${arranging ? `<span class="row-actions step-actions">
+          <button class="btn sm ghost" data-step-move="${i}" data-dir="-1" aria-label="往上" ${i === 0 ? 'disabled' : ''}>↑</button>
+          <button class="btn sm ghost" data-step-move="${i}" data-dir="1" aria-label="往下" ${i === steps.length - 1 ? 'disabled' : ''}>↓</button>
+          ${x.taskId ? '' : `<button class="btn sm ghost" data-step-promote="${i}">變成任務</button>`}
+          <button class="btn sm ghost" data-step-del="${i}" aria-label="刪除這一步">刪除</button>
+        </span>` : ''}</li>`;
+
+    const resHtml = !res ? '' : `
+      ${res.first ? `<div class="mt-summary"><b>建議先做</b>　${esc(res.first)}</div>` : ''}
+      ${res.questions.length ? `<p class="small" style="margin:10px 0 4px"><b>可以先問清楚的事</b></p><ul class="tight small">${res.questions.map(q => `<li>${esc(q)}</li>`).join('')}</ul>` : ''}
+      ${res.steps.length ? `<ul class="list mt-actions">${res.steps.map((a, i) => `<li>
+          <input type="checkbox" class="check" data-r="${i}" data-p="pick" ${a.pick !== false ? 'checked' : ''} aria-label="要這一步">
+          <div class="grow mt-action">
+            <input type="text" data-r="${i}" data-p="title" value="${esc(a.title)}" aria-label="步驟">
+            <div class="mt-action-row">
+              <select data-r="${i}" data-p="minutes" aria-label="時間">${[15, 30, 45, 60, 90, 120, 180, 240].concat([a.minutes]).filter((v, j, arr) => arr.indexOf(v) === j).sort((p, q) => p - q).map(v => `<option value="${v}" ${v === a.minutes ? 'selected' : ''}>約 ${fmtMin(v)}</option>`).join('')}</select>
+              <input type="date" data-r="${i}" data-p="due" value="${esc(a.due)}" aria-label="建議完成日">
+              <select data-r="${i}" data-p="kind" aria-label="類型"><option value="task" ${a.kind === 'task' ? 'selected' : ''}>自己做</option><option value="follow" ${a.kind === 'follow' ? 'selected' : ''}>等別人回覆</option></select>
+            </div>
+          </div></li>`).join('')}</ul>
+        <div class="actions" style="margin-top:10px">
+          <button class="btn primary" data-act="use-steps">加成這個任務的步驟</button>
+          <button class="btn" data-act="use-tasks">拆成獨立任務</button>
+          <button class="btn ghost" data-act="clear-res">不要了</button>
+        </div>
+        <p class="hint">「加成步驟」會在這個任務底下列出清單，打勾完成；「拆成獨立任務」適合每一步要各自排日期、出現在行事曆上。</p>`
+      : '<p class="empty">AI 沒有拆出步驟，可以補充說明後再試一次。</p>'}`;
+
+    const html = `
+      <div class="page-head"><div><p style="margin:0"><a href="#/tasks">← 任務</a></p>
+          <h1 class="${t.status === 'done' ? 'done-text' : ''}">${esc(t.title)}</h1>
+          <p>${P.dueLabel(t.due, t.status === 'done', t.time)}${t.buId ? '・' + esc(S.buName(t.buId)) : ''}${t.importance === 'H' ? '・重要' : ''}${t.status === 'done' ? '・已完成' : ''}</p></div>
+        <div class="actions"><button class="btn" data-act="edit">編輯任務</button></div></div>
+      ${t.notes ? `<section class="panel"><p style="margin:0;white-space:pre-wrap">${esc(t.notes)}</p></section>` : ''}
+
+      <section class="panel">
+        <div class="panel-head"><h2>步驟 ${steps.length ? `（${doneN}/${steps.length}）` : ''}</h2>
+          ${steps.length ? `<div class="actions"><span class="small muted">${doneN === steps.length ? '全部完成' : left ? '還要約 ' + fmtMin(left) : '還有 ' + (steps.length - doneN) + ' 步'}</span>
+            <button class="btn sm ${arranging ? 'primary' : 'ghost'}" data-act="arrange">${arranging ? '完成整理' : '整理步驟'}</button></div>` : ''}</div>
+        ${steps.length ? `<div class="progress" style="margin-bottom:6px"><i style="width:${pct}%"></i></div>
+          <ul class="list steps-list">${steps.map(stepRow).join('')}</ul>` : '<p class="empty">還沒有步驟。可以用下面的 AI 拆解，或自己一步一步加。</p>'}
+        ${steps.length && doneN === steps.length && t.status !== 'done' ? '<div class="notice ok" style="margin-top:10px">每一步都完成了。 <button class="btn sm" data-act="finish">把任務標成完成</button></div>' : ''}
+        <form class="step-add" id="step-add">
+          <textarea id="step-new" rows="1" placeholder="新增一步（可一次貼上多行）" aria-label="新增步驟"></textarea>
+          <button class="btn" type="submit">加入</button>
+        </form>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>用 AI 拆解</h2></div>
+        <div class="field"><label for="bd-extra">補充說明（選填）</label>
+          <textarea id="bd-extra" placeholder="例如：要交給誰、做到什麼程度算完成、手上已經有哪些資料、有什麼限制">${esc(extras[t.id] || '')}</textarea></div>
+        <div class="actions"><button class="btn primary" data-act="ai" ${busy ? 'disabled' : ''}>${busy ? 'AI 拆解中…' : steps.length ? '重新拆解' : '用 AI 拆解'}</button></div>
+        <p class="hint">${aiOk ? `會把任務標題、備註和補充說明送到「${esc(PMO.ai.providerLabel())}」。` : 'AI 還沒設定，到「設定」填入 API key 就能用。'}不要放公司機密數字。</p>
+        ${aiError ? `<div class="notice" style="margin-top:10px"><b>沒有拆解成功。</b> ${esc(aiError)} <a href="#/settings">到設定</a></div>` : ''}
+        ${resHtml}
+      </section>`;
+    return { title: '任務', html };
+  }
+
+  function promote(t, x) {
+    const nt = { id: uid('t'), title: x.title, buId: t.buId || '', due: x.due || t.due || '', importance: t.importance || 'M', effort: (x.minutes || 30) <= 30 ? 'S' : (x.minutes || 30) <= 120 ? 'M' : 'L',
+      status: x.done ? 'done' : 'todo', triaged: true, notes: '來自任務：' + t.title, created: today(), parentId: t.id, subtasks: [] };
+    S.data.tasks.push(nt);
+    x.taskId = nt.id;
+    return nt;
+  }
+
+  function mount(root, params) {
+    const id = params.id;
+    const t = () => find(id);
+    if (!t()) return;
+    const save = () => S.save();
+
+    const addForm = root.querySelector('#step-add');
+    const newEl = root.querySelector('#step-new');
+    newEl.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); addForm.requestSubmit(); } };
+    addForm.onsubmit = e => {
+      e.preventDefault();
+      const lines = newEl.value.split(/\r?\n/).map(l => l.replace(/^\s*(?:[-*•‧·]|\d+[.、)）]|\[\s?\]|□)\s*/, '').trim()).filter(Boolean);
+      if (!lines.length) return;
+      lines.forEach(l => t().subtasks.push({ id: uid('st'), title: l, done: false, minutes: 0, due: '' }));
+      save(); PMO.app.render();
+      const again = document.getElementById('step-new'); if (again) again.focus({ preventScroll: true });
+    };
+
+    root.oninput = e => {
+      if (e.target.id === 'bd-extra') { extras[id] = e.target.value; return; }
+      const r = e.target.dataset.r;
+      if (r != null && results[id]) { results[id].steps[r][e.target.dataset.p] = e.target.value; return; }
+    };
+    root.onchange = e => {
+      const el = e.target;
+      if (el.dataset.stepCheck != null) {
+        const x = t().subtasks[Number(el.dataset.stepCheck)];
+        x.done = el.checked;
+        if (x.taskId) { const linked = find(x.taskId); if (linked) { linked.status = el.checked ? 'done' : 'todo'; linked.doneOn = el.checked ? today() : ''; } }
+        save(); PMO.app.render(); return;
+      }
+      if (el.dataset.stepTitle != null) {
+        const v = el.value.trim();
+        if (v) { t().subtasks[Number(el.dataset.stepTitle)].title = v; save(); }
+        return;
+      }
+      const r = el.dataset.r;
+      if (r != null && results[id]) {
+        const a = results[id].steps[r];
+        const p = el.dataset.p;
+        a[p] = p === 'pick' ? el.checked : p === 'minutes' ? Number(el.value) : el.value;
+      }
+    };
+
+    root.onclick = async e => {
+      const el = e.target.closest('button,[data-act]');
+      if (!el || el.disabled) return;
+      const T = t();
+      if (el.dataset.stepDel != null) { T.subtasks.splice(Number(el.dataset.stepDel), 1); save(); PMO.app.render(); return; }
+      if (el.dataset.stepMove != null) {
+        const i = Number(el.dataset.stepMove), j = i + Number(el.dataset.dir);
+        if (j < 0 || j >= T.subtasks.length) return;
+        [T.subtasks[i], T.subtasks[j]] = [T.subtasks[j], T.subtasks[i]];
+        save(); PMO.app.render(); return;
+      }
+      if (el.dataset.stepPromote != null) {
+        const nt = promote(T, T.subtasks[Number(el.dataset.stepPromote)]);
+        save(); ui.toast('已變成任務：' + nt.title); PMO.app.render(); return;
+      }
+      const act = el.dataset.act;
+      if (act === 'arrange') { arranging = !arranging; PMO.app.render(); return; }
+      if (act === 'edit') { await PMO.edit.task(T); if (find(id)) PMO.app.render(); else location.hash = '#/tasks'; return; }
+      if (act === 'finish') { T.status = 'done'; T.doneOn = today(); save(); ui.toast('完成：' + T.title); PMO.app.render(); return; }
+      if (act === 'clear-res') { delete results[id]; PMO.app.render(); return; }
+      if (act === 'ai') {
+        if (!PMO.ai.ready()) { ui.toast('請先到「設定」填入 AI 的 API key'); return; }
+        busy = true; aiError = ''; PMO.app.render();
+        try {
+          results[id] = await PMO.ai.breakdown({ task: T, extra: extras[id] || '' });
+          const sw = PMO.ai.takeSwitch();
+          if (sw) ui.toast('原本的模型「' + sw.from + '」找不到，已自動換成「' + sw.to + '」');
+        } catch (err) { aiError = err.message; }
+        busy = false;
+        if (location.hash === '#/task/' + id) PMO.app.render();
+        return;
+      }
+      if (act === 'use-steps' || act === 'use-tasks') {
+        const picked = results[id].steps.filter(a => a.pick !== false && String(a.title).trim());
+        if (!picked.length) { ui.toast('沒有勾選任何步驟'); return; }
+        if (act === 'use-steps') {
+          picked.forEach(a => T.subtasks.push({ id: uid('st'), title: a.title.trim(), done: false, minutes: Number(a.minutes) || 0, due: a.due || '', kind: a.kind }));
+          ui.toast('已加入 ' + picked.length + ' 個步驟');
+        } else {
+          picked.forEach(a => {
+            if (a.kind === 'follow') {
+              S.data.followups.push({ id: uid('f'), what: a.title.trim(), who: '（待補）', buId: T.buId || '', channel: '', askedOn: today(),
+                nudgeOn: a.due || addDays(today(), 3), status: 'waiting', notes: '來自任務：' + T.title });
+            } else {
+              const st = { id: uid('st'), title: a.title.trim(), done: false, minutes: Number(a.minutes) || 0, due: a.due || '' };
+              T.subtasks.push(st);
+              promote(T, st);
+            }
+          });
+          ui.toast('已拆成 ' + picked.length + ' 項，排進任務與等待回覆');
+        }
+        delete results[id];
+        save(); PMO.app.render();
+      }
     };
   }
 
@@ -5465,6 +5742,7 @@ PMO.app = (function () {
     const name = parts[0];
     if (name === 'bu') return { view: 'bu', params: { id: decodeURIComponent(parts[1] || '') } };
     if (name === 'project') return { view: 'project', params: { id: decodeURIComponent(parts[1] || '') } };
+    if (name === 'task') return { view: 'task', params: { id: decodeURIComponent(parts[1] || '') } };
     if (name === 'meeting') return { view: 'meeting', params: { id: decodeURIComponent(parts[1] || '') } };
     return { view: PMO.views[name] ? name : 'today', params: {} };
   }
@@ -5476,6 +5754,7 @@ PMO.app = (function () {
     if (route.view === 'bu') activeBu = route.params.id;
     if (route.view === 'project') { const p = S.project(route.params.id); activeBu = p && p.buId; }
     if (route.view === 'meeting') route = Object.assign({}, route, { view: 'meetings' });
+    if (route.view === 'task') route = Object.assign({}, route, { view: 'tasks' });
     nav.querySelectorAll('a').forEach(a => {
       const on = (a.dataset.nav && a.dataset.nav === route.view) || (a.dataset.bu && a.dataset.bu === activeBu);
       a.classList.toggle('active', !!on);
