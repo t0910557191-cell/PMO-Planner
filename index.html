@@ -495,6 +495,30 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
 .tight { padding-left: 20px; margin: 0; } .tight li { margin-bottom: 6px; line-height: 1.6; }
 #backup-hint .muted { color: var(--muted); }
 
+/* Clock and next-up reminder */
+input[type="time"] { -webkit-appearance: none; appearance: none; display: block; height: 40px; padding: 0 10px; line-height: 38px; text-align: left; max-width: 100%; }
+input[type="time"]::-webkit-date-and-time-value { text-align: left; margin: 0; }
+@media (max-width: 640px) { input[type="time"] { height: 44px; line-height: 42px; font-size: 16px; } }
+.clock-pill { display: inline-flex; align-items: baseline; gap: 2px; text-decoration: none; color: var(--ink); max-width: 46vw; min-width: 0; white-space: nowrap; }
+.clock-pill b { font-weight: 600; }
+.clock-pill-next { color: var(--muted); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+@media (max-width: 420px) { .clock-pill-next { display: none; } }
+.mono { font-variant-numeric: tabular-nums; }
+.clock-panel .clock-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+.clock-time { font-family: var(--display); font-size: 2.4rem; line-height: 1; font-variant-numeric: tabular-nums; }
+.clock-next { text-align: right; min-width: 0; flex: 1 1 180px; }
+.clock-list:not(:empty) { margin-top: 10px; border-top: 1px solid var(--line); }
+.clock-list li.past { opacity: .5; }
+.alert-bar { position: sticky; top: 0; z-index: 30; background: var(--accent); color: var(--accent-ink); padding: 10px 16px; box-shadow: 0 2px 10px rgba(0,0,0,.12); }
+.alert-inner { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; max-width: 1100px; margin: 0 auto; }
+.alert-time { font-family: var(--display); font-size: 1.3rem; font-variant-numeric: tabular-nums; }
+.alert-text { flex: 1 1 200px; min-width: 0; }
+.alert-text .muted { color: inherit; opacity: .8; }
+.alert-actions { display: flex; gap: 6px; margin-left: auto; }
+.alert-bar .btn { background: rgba(255,255,255,.15); color: inherit; border-color: rgba(255,255,255,.35); }
+.alert-bar .btn.ghost { background: transparent; }
+@media (max-width: 640px) { .alert-bar { position: fixed; left: 8px; right: 8px; top: calc(8px + env(safe-area-inset-top, 0px)); border-radius: 12px; } }
+
 </style>
 </head>
 <body>
@@ -539,7 +563,7 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
           <a href="#/backup" data-nav="backup">備份與匯出</a>
           <a href="#/settings" data-nav="settings">設定</a>
         </div>
-        <p class="nav-version">版本 10/19・同步・AI 修正</p>
+        <p class="nav-version">版本 10/19・時鐘提醒</p>
       </nav>
     </aside>
 
@@ -547,8 +571,9 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
       <header class="topbar">
         <button type="button" class="menu-btn" id="menu-btn" aria-label="開啟選單" aria-controls="nav" aria-expanded="false">☰</button>
         <div class="topbar-title" id="topbar-title">今天</div>
-        <div class="topbar-right"><span id="backup-hint"></span><a href="#/settings" class="topbar-gear" aria-label="設定" title="設定">⚙</a></div>
+        <div class="topbar-right"><a id="clock-pill" class="clock-pill" href="#/today"></a><span id="backup-hint"></span><a href="#/settings" class="topbar-gear" aria-label="設定" title="設定">⚙</a></div>
       </header>
+      <div id="alert-bar" class="alert-bar" role="alert" hidden></div>
       <main id="view" tabindex="-1"></main>
     </div>
   </div>
@@ -802,7 +827,7 @@ PMO.store = (function () {
     out.wins = arr(out.wins).map(w => Object.assign({ buId: '', impact: '', tags: [], english: '' }, w));
     out.questions = arr(out.questions);
     out.quotes = arr(out.quotes);
-    out.meetings = arr(out.meetings).map(m => Object.assign({ title: '', date: '', buId: '', attendees: '', notes: '', decisions: '', files: [], created: '' }, m));
+    out.meetings = arr(out.meetings).map(m => Object.assign({ title: '', date: '', time: '', buId: '', attendees: '', notes: '', decisions: '', files: [], created: '' }, m));
     out.quotePrefs = Object.assign({ off: [], favs: [], todaySource: 'all' }, out.quotePrefs || {});
     out.rituals = Object.assign({ days: {}, weeks: {} }, out.rituals || {});
     out.meta = Object.assign(base.meta, out.meta || {});
@@ -1372,8 +1397,9 @@ PMO.edit = (function () {
       allowDelete: !!existing,
       fields: [
         { name: 'title', label: '要做什麼', value: cur.title, required: true },
-        { name: 'buId', label: '單位', type: 'select', value: cur.buId != null ? cur.buId : (d.buId || ''), row: true, options: S.unitOptions(true) },
         { name: 'due', label: '截止日', type: 'date', value: cur.due || d.due || '', row: true },
+        { name: 'time', label: '時間（選填）', type: 'time', value: cur.time || d.time || '', row: true },
+        { name: 'buId', label: '單位', type: 'select', value: cur.buId != null ? cur.buId : (d.buId || ''), row: true, options: S.unitOptions(true) },
         { name: 'importance', label: '重要性', type: 'select', value: cur.importance || 'M', row: true, options: IMPORTANCE },
         { name: 'effort', label: '花多少力氣', type: 'select', value: cur.effort || 'M', row: true, options: EFFORT },
         existing ? { name: 'status', label: '狀態', type: 'select', value: cur.status || 'todo', row: true,
@@ -1517,10 +1543,10 @@ PMO.parts = (function () {
     return `<span class="unit-tag"><span class="dot" style="background:${esc(b.color)}"></span>${esc(b.name)}</span>`;
   }
 
-  function dueLabel(d, done) {
+  function dueLabel(d, done, time) {
     if (!d) return '<span class="date">無期限</span>';
     const n = daysBetween(today(), d);
-    const txt = n === 0 ? '今天' : n === 1 ? '明天' : n === -1 ? '昨天' : n < 0 ? Math.abs(n) + ' 天前' : fmtDate(d).slice(5);
+    const txt = (n === 0 ? '今天' : n === 1 ? '明天' : n === -1 ? '昨天' : n < 0 ? Math.abs(n) + ' 天前' : fmtDate(d).slice(5)) + (time ? ' ' + esc(time) : '');
     return `<span class="date ${!done && n < 0 ? 'over' : ''}">${txt}</span>`;
   }
 
@@ -1529,7 +1555,7 @@ PMO.parts = (function () {
     const done = t.status === 'done';
     return `<li>
       <input type="checkbox" class="check" data-act="task-toggle" data-id="${esc(t.id)}" ${done ? 'checked' : ''} aria-label="完成 ${esc(t.title)}">
-      ${dueLabel(t.due, done)}
+      ${dueLabel(t.due, done, t.time)}
       <span class="grow ${done ? 'done-text' : ''}">${esc(t.title)}
         <span class="row-meta">${o.hideUnit ? '' : unitTag(t.buId)}${t.importance === 'H' ? '<span class="pill H">重要</span>' : ''}${t.status === 'doing' ? '<span class="pill tag">進行中</span>' : ''}${o.showScore ? `<span class="small muted mono">分數 ${S.taskScore(t)}</span>` : ''}</span></span>
       <span class="row-actions"><button class="btn sm ghost" data-act="task-edit" data-id="${esc(t.id)}">${t.triaged === false ? '整理' : '編輯'}</button></span></li>`;
@@ -1919,7 +1945,7 @@ PMO.gcal = (function () {
     });
     if (inc.tasks !== false) S.data.tasks.forEach(t => {
       if (!t.due || t.triaged === false || (t.status === 'done' && !includeDone)) return;
-      out.push({ id: t.id, date: t.due, done: t.status === 'done',
+      out.push({ id: t.id, date: t.due, time: t.time || '', done: t.status === 'done',
         summary: '[任務' + (t.buId ? '・' + S.buName(t.buId) : '') + '] ' + t.title, description: t.notes || '' });
     });
     if (inc.followups !== false) S.data.followups.forEach(f => {
@@ -1930,12 +1956,22 @@ PMO.gcal = (function () {
     return out;
   }
 
+  // A task with a time becomes a 30-minute event in this device's time zone.
+  function timedRange(date, time) {
+    const zone = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch (e) { return undefined; } })();
+    const [h, m] = time.split(':').map(Number);
+    const endMin = h * 60 + m + 30;
+    const p = n => String(n).padStart(2, '0');
+    const endDate = endMin >= 1440 ? addDays(date, 1) : date;
+    const e = endMin % 1440;
+    return { start: { dateTime: date + 'T' + p(h) + ':' + p(m) + ':00', timeZone: zone }, end: { dateTime: endDate + 'T' + p(Math.floor(e / 60)) + ':' + p(e % 60) + ':00', timeZone: zone } };
+  }
+
   function eventFor(item) {
     return {
       summary: item.summary + (item.done ? ' ✓' : ''),
       description: (item.description ? item.description + '\n\n' : '') + '由 PMO Planner同步。',
-      start: { date: item.date },
-      end: { date: addDays(item.date, 1) },
+      ...(item.time ? timedRange(item.date, item.time) : { start: { date: item.date }, end: { date: addDays(item.date, 1) } }),
       colorId: item.done ? '8' : undefined,
       extendedProperties: { private: { pmoId: item.id } }
     };
@@ -2332,6 +2368,171 @@ PMO.sync = (function () {
   }
 
   return { start, syncNow, quiet, removeCloud, merge, status: () => status, onStatus: fn => watchers.push(fn), enabled: on };
+})();
+
+</script>
+  <script>
+/* ---- js/services/clock.js ---- */
+/* Local clock and "next up" reminders.
+   Looks at today's items that have a time: tasks with a time, meetings with a time, and timed Google Calendar events.
+   While the page is open it shows the time and the next item in the top bar and on 今天, and pops up a reminder
+   a few minutes before (and again when it starts). With browser notifications on, it also sends a system notification. */
+PMO.clock = (function () {
+  const S = PMO.store;
+  const { today, pad, esc } = PMO.util;
+  const KEY = 'pmo.alerted';
+  let gToday = { date: '', at: 0, items: [] };
+  const snoozed = {};          // key -> time (ms) before which it should not pop up again
+  let current = null;          // item shown in the banner
+  let timer = null;
+
+  const tz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { return ''; } })();
+  function zoneLabel() {
+    const off = -new Date().getTimezoneOffset() / 60;
+    const gmt = 'GMT' + (off >= 0 ? '+' : '') + (Number.isInteger(off) ? off : off.toFixed(1));
+    const names = { 'Asia/Taipei': '台北時間', 'Asia/Shanghai': '中國時間', 'Asia/Hong_Kong': '香港時間', 'Asia/Tokyo': '東京時間', 'Asia/Singapore': '新加坡時間', 'Asia/Ho_Chi_Minh': '越南時間', 'America/Los_Angeles': '美西時間', 'America/New_York': '美東時間', 'Europe/London': '倫敦時間' };
+    return (names[tz] || tz || '本地時間') + ' ' + gmt;
+  }
+
+  const nowHM = () => { const d = new Date(); return pad(d.getHours()) + ':' + pad(d.getMinutes()); };
+  const toMin = hm => { const [h, m] = String(hm).split(':').map(Number); return h * 60 + (m || 0); };
+  const lead = () => Number(S.settings.alertLead) || 10;
+
+  /* Today's (or another day's) items with a time, sorted. */
+  function timed(date) {
+    const d = S.data;
+    const out = [];
+    d.tasks.forEach(t => { if (t.status !== 'done' && t.triaged !== false && t.due === date && t.time) out.push({ key: 't:' + t.id, at: t.time, title: t.title, kind: '任務', href: '#/tasks' }); });
+    (d.meetings || []).forEach(m => { if (m.date === date && m.time) out.push({ key: 'm:' + m.id, at: m.time, title: m.title || '會議', kind: '會議', href: '#/meeting/' + m.id }); });
+    if (gToday.date === date) gToday.items.forEach(e => out.push(e));
+    return out.sort((a, b) => a.at.localeCompare(b.at));
+  }
+
+  function refreshGoogle(force) {
+    const t = today();
+    if (!PMO.gcal || !PMO.gcal.connected()) return;
+    if (!force && gToday.date === t && Date.now() - gToday.at < 10 * 60e3) return;
+    gToday.at = Date.now();
+    PMO.gcal.range(t, t).then(evs => {
+      gToday = { date: t, at: Date.now(), items: evs.filter(e => !e.fromPmo && !e.allDay && e.date === t && e.time)
+        .map(e => ({ key: 'g:' + e.id, at: e.time, title: e.title, kind: '日曆', href: e.link || '#/schedule', external: !!e.link })) };
+      tick();
+    }).catch(() => { /* reading the calendar is optional here */ });
+  }
+
+  function next() {
+    const now = toMin(nowHM());
+    return timed(today()).find(i => toMin(i.at) >= now) || null;
+  }
+  function untilText(at) {
+    const diff = toMin(at) - toMin(nowHM());
+    if (diff <= 0) return '現在開始';
+    if (diff < 60) return '還有 ' + diff + ' 分鐘';
+    return '還有 ' + Math.floor(diff / 60) + ' 小時' + (diff % 60 ? ' ' + (diff % 60) + ' 分' : '');
+  }
+
+  function alerted() {
+    try { const s = JSON.parse(localStorage.getItem(KEY) || '{}'); return s.day === today() ? s : { day: today(), keys: [] }; }
+    catch (e) { return { day: today(), keys: [] }; }
+  }
+  function markAlerted(k) { const s = alerted(); s.keys.push(k); try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) { /* ignore */ } }
+
+  function checkAlerts() {
+    if (S.settings.alertOn === false) return;
+    const now = toMin(nowHM());
+    const done = alerted().keys;
+    for (const i of timed(today())) {
+      const diff = toMin(i.at) - now;
+      const phase = diff > 0 && diff <= lead() ? 'pre' : diff <= 0 && diff > -5 ? 'start' : '';
+      if (!phase) continue;
+      const k = i.key + '@' + i.at + ':' + phase;
+      if (done.includes(k) || (snoozed[i.key] && snoozed[i.key] > Date.now())) continue;
+      markAlerted(k);
+      show(i, phase);
+      if (S.settings.notify && 'Notification' in window && Notification.permission === 'granted') {
+        try { new Notification(phase === 'pre' ? i.at + ' ' + i.title : '現在開始：' + i.title, { body: i.kind + '・' + (phase === 'pre' ? untilText(i.at) : i.at), tag: k }); } catch (e) { /* ignore */ }
+      }
+      break;
+    }
+  }
+
+  function show(i, phase) {
+    const bar = document.getElementById('alert-bar');
+    if (!bar) return;
+    current = i;
+    bar.innerHTML = `<div class="alert-inner"><span class="alert-time">${esc(i.at)}</span>
+      <span class="alert-text"><b>${phase === 'pre' ? esc(untilText(i.at)) : '現在開始'}</b>　${esc(i.title)}<span class="small muted">・${esc(i.kind)}</span></span>
+      <span class="alert-actions"><button class="btn sm" data-alert="open">打開</button><button class="btn sm ghost" data-alert="snooze">5 分鐘後</button><button class="btn sm ghost" data-alert="close" aria-label="關閉">知道了</button></span></div>`;
+    bar.hidden = false;
+  }
+  function hide() { const bar = document.getElementById('alert-bar'); if (bar) bar.hidden = true; current = null; }
+
+  /* The block on 今天. */
+  function panel() {
+    const list = timed(today());
+    const now = toMin(nowHM());
+    const d = new Date();
+    return `<section class="panel clock-panel" id="clock-panel">
+      <div class="clock-row">
+        <div><div class="clock-time" id="clock-now">${nowHM()}</div><div class="small muted">${zoneLabel()}</div></div>
+        <div class="clock-next" id="clock-next">${nextHtml()}</div>
+      </div>
+      <ul class="list clock-list" id="clock-list">${listHtml(list, now)}</ul>
+    </section>`;
+  }
+  function nextHtml() {
+    const n = next();
+    if (!n) return timed(today()).length ? '<span class="muted">今天排了時間的事都過了</span>' : '<span class="muted small">任務或會議加上時間，就會在這裡倒數並提前提醒你。</span>';
+    return `<span class="small muted">下一件・${esc(untilText(n.at))}</span><br><b>${esc(n.at)}　${esc(n.title)}</b>`;
+  }
+  function listHtml(list, now) {
+    if (!list.length) return '';
+    return list.map(i => `<li class="${toMin(i.at) < now ? 'past' : ''}"><span class="date">${esc(i.at)}</span><span class="grow">${i.external ? `<a href="${esc(i.href)}" target="_blank" rel="noopener">${esc(i.title)}</a>` : `<a href="${esc(i.href)}">${esc(i.title)}</a>`}<span class="row-meta"><span class="small muted">${esc(i.kind)}</span></span></span></li>`).join('');
+  }
+
+  function tick() {
+    const hm = nowHM();
+    const n = next();
+    const pill = document.getElementById('clock-pill');
+    if (pill) {
+      pill.innerHTML = `<b>${hm}</b>${n ? `<span class="clock-pill-next">・${esc(n.at)} ${esc(n.title)}</span>` : ''}`;
+      pill.title = n ? '下一件：' + n.at + ' ' + n.title + '（' + untilText(n.at) + '）' : zoneLabel();
+    }
+    const nowEl = document.getElementById('clock-now');
+    if (nowEl) {
+      nowEl.textContent = hm;
+      document.getElementById('clock-next').innerHTML = nextHtml();
+      document.getElementById('clock-list').innerHTML = listHtml(timed(today()), toMin(hm));
+    }
+    if (current && document.getElementById('alert-bar') && !document.getElementById('alert-bar').hidden) {
+      const t = document.querySelector('#alert-bar .alert-text b');
+      if (t) t.textContent = toMin(current.at) - toMin(hm) > 0 ? untilText(current.at) : '現在開始';
+    }
+    checkAlerts();
+  }
+
+  function start() {
+    document.addEventListener('click', e => {
+      const a = e.target.closest('[data-alert]');
+      if (!a) return;
+      const act = a.dataset.alert;
+      if (act === 'open' && current) {
+        if (current.external) window.open(current.href, '_blank', 'noopener'); else location.hash = current.href;
+      }
+      if (act === 'snooze' && current) {
+        snoozed[current.key] = Date.now() + 5 * 60e3;
+        // allow the reminder to come back after the snooze
+        const s = alerted(); s.keys = s.keys.filter(k => !k.startsWith(current.key + '@')); try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (err) { /* ignore */ }
+      }
+      hide();
+    });
+    S.onChange(() => setTimeout(tick, 0));
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { refreshGoogle(); tick(); } });
+    tick(); refreshGoogle();
+    timer = setInterval(() => { tick(); refreshGoogle(); }, 15000);
+  }
+
+  return { start, panel, tick, timed, next, zoneLabel, refreshGoogle };
 })();
 
 </script>
@@ -2858,6 +3059,8 @@ PMO.views.today = (function () {
 
     const html = `
       <div class="page-head"><div><h1>今天</h1><p>${fmtDate(t)}（週${weekday}）・今天完成 ${doneToday} 件</p></div></div>
+
+      ${PMO.clock.panel()}
 
       <section class="panel capture">
         <form id="capture-form" class="capture-form">
@@ -3732,6 +3935,7 @@ PMO.views.meeting = (function () {
         <div class="field"><label for="mt-title">會議名稱</label><input type="text" id="mt-title" data-f="title" value="${esc(m.title)}" placeholder="例如：財務月會"></div>
         <div class="field-row">
           <div class="field"><label for="mt-date">日期</label><input type="date" id="mt-date" data-f="date" value="${esc(m.date)}"></div>
+          <div class="field"><label for="mt-time">時間</label><input type="time" id="mt-time" data-f="time" value="${esc(m.time || '')}"></div>
           <div class="field"><label for="mt-bu">單位</label><select id="mt-bu" data-f="buId">${units.map(o => `<option value="${esc(o.value)}" ${o.value === m.buId ? 'selected' : ''}>${esc(o.label)}</option>`).join('')}</select></div>
         </div>
         <div class="field"><label for="mt-att">與會者</label><input type="text" id="mt-att" data-f="attendees" value="${esc(m.attendees)}" placeholder="例如：財務經理、會計課長"></div>
@@ -4514,6 +4718,13 @@ PMO.views.settings = (function () {
               : `<button type="button" class="btn primary" data-act="notify-on" ${perm === 'unsupported' ? 'disabled' : ''}>開啟提醒</button>`}
           </div>
           ${perm === 'denied' ? '<p class="hint">瀏覽器目前封鎖了通知，請在網址列左邊的網站設定裡改成「允許」。</p>' : ''}
+          <div class="field-row" style="margin-top:12px">
+            <div class="field"><label for="s_alerton">有時間的任務和會議</label>
+              <select id="s_alerton" data-live="alertOn"><option value="1" ${s.alertOn !== false ? 'selected' : ''}>在頁面上跳出提醒</option><option value="0" ${s.alertOn === false ? 'selected' : ''}>不要提醒</option></select></div>
+            <div class="field"><label for="s_lead">提前多久提醒</label>
+              <select id="s_lead" data-live="alertLead">${[5, 10, 15, 30, 60].map(n => `<option value="${n}" ${(Number(s.alertLead) || 10) === n ? 'selected' : ''}>${n} 分鐘前</option>`).join('')}</select></div>
+          </div>
+          <p class="hint" style="margin-top:0">右上角會顯示現在時間（${esc(PMO.clock.zoneLabel())}）和下一件事。上面的瀏覽器通知開著的話，切到別的分頁也會收到系統通知。</p>
         </section>
 
         <section class="panel">
@@ -4582,6 +4793,11 @@ PMO.views.settings = (function () {
 
   function mount(root) {
     const f = root.querySelector('#settings-form');
+    root.querySelectorAll('[data-live]').forEach(el => { el.onchange = () => {
+      const k = el.dataset.live;
+      S.settings[k] = k === 'alertOn' ? el.value === '1' : Number(el.value);
+      S.saveSettings(); ui.toast('已儲存'); PMO.clock.tick();
+    }; });
     f.elements.aiProvider.onchange = e => {
       const claude = e.target.value === 'claude';
       root.querySelector('#claude-fields').hidden = !claude;
@@ -4972,7 +5188,7 @@ PMO.views.schedule = (function () {
     const d = S.data;
     const out = [];
     const inR = x => x && x >= from && x <= to;
-    d.tasks.forEach(t => { if (t.triaged !== false && inR(t.due)) out.push({ date: t.due, kind: 'task', ref: t, done: t.status === 'done' }); });
+    d.tasks.forEach(t => { if (t.triaged !== false && inR(t.due)) out.push({ date: t.due, kind: 'task', ref: t, done: t.status === 'done', time: t.time || '' }); });
     S.allMilestones().forEach(x => { if (inR(x.m.date)) out.push({ date: x.m.date, kind: 'ms', ref: x, done: x.m.done }); });
     d.followups.forEach(f => { if (f.status === 'waiting' && inR(f.nudgeOn)) out.push({ date: f.nudgeOn, kind: 'follow', ref: f }); });
     d.routines.forEach(r => routineDates(r, from, to).forEach(dt => out.push({ date: dt, kind: 'routine', ref: r })));
@@ -5338,6 +5554,7 @@ PMO.app = (function () {
 
   applyTheme();
   if (PMO.notify) PMO.notify.start();
+  if (PMO.clock) PMO.clock.start();
   if (PMO.sync) { PMO.sync.onStatus(() => renderBackupHint()); PMO.sync.start(); }
   return { render, applyTheme };
 })();
